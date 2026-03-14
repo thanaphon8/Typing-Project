@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { buildChartData, buildWpmPoints, WordEvent } from '../../lib/chartUtils';
 
 const style = `
   @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
@@ -35,12 +36,30 @@ const style = `
   .pixel-btn:hover { box-shadow: 1px 1px 0 var(--gb-darkest); transform: translate(2px,2px); }
   .pixel-btn.sel { background: var(--gb-light); box-shadow: inset 2px 2px 0 var(--gb-darkest); transform: translate(2px,2px); }
 
+  /* FIX 4: replaced confirm() danger button with inline confirm pattern */
   .pixel-btn-danger {
     border: 3px solid #4a1010; box-shadow: 3px 3px 0 var(--gb-darkest);
     cursor: pointer; background: #2a0a0a; color: #ff6b6b;
     padding: 6px 14px; font-size: 7px; text-transform: uppercase; letter-spacing: 1px; transition: all 0.08s;
   }
   .pixel-btn-danger:hover { box-shadow: 1px 1px 0 var(--gb-darkest); transform: translate(2px,2px); }
+
+  .pixel-btn-confirm {
+    border: 3px solid #ff6b6b; box-shadow: 3px 3px 0 var(--gb-darkest);
+    cursor: pointer; background: #5a0000; color: #ff6b6b;
+    padding: 6px 14px; font-size: 7px; text-transform: uppercase; letter-spacing: 1px; transition: all 0.08s;
+    animation: confirm-pulse 0.5s steps(1) infinite;
+  }
+  .pixel-btn-confirm:hover { box-shadow: 1px 1px 0 var(--gb-darkest); transform: translate(2px,2px); }
+
+  @keyframes confirm-pulse { 0%,49%{opacity:1} 50%,100%{opacity:0.7} }
+
+  .pixel-btn-cancel {
+    border: 3px solid var(--gb-dark); box-shadow: 3px 3px 0 var(--gb-darkest);
+    cursor: pointer; background: rgba(15,56,15,0.4); color: var(--gb-mid);
+    padding: 6px 14px; font-size: 7px; text-transform: uppercase; letter-spacing: 1px; transition: all 0.08s;
+  }
+  .pixel-btn-cancel:hover { box-shadow: 1px 1px 0 var(--gb-darkest); transform: translate(2px,2px); }
 
   .gb-screen {
     background: var(--gb-screen); border: 6px solid var(--gb-dark);
@@ -102,14 +121,6 @@ const style = `
   .detail-stat-val { font-size: clamp(22px,4vw,36px); color: var(--gb-darkest); text-shadow: 2px 2px 0 var(--gb-dark); line-height: 1; }
   .detail-stat-lbl { font-size: 7px; color: var(--gb-dark); letter-spacing: 1px; }
 
-  .chart-bar-row { display: flex; align-items: flex-end; gap: 2px; height: 72px; }
-  .chart-bar { flex: 1; min-width: 4px; border: 1px solid var(--gb-darkest); }
-  .chart-bar.c { background: var(--gb-darkest); }
-  .chart-bar.w { background: rgba(15,56,15,0.4); border-color: rgba(0,0,0,0.2); }
-
-  .chart-lbl-row { display: flex; gap: 2px; margin-top: 2px; }
-  .chart-lbl-row span { flex: 1; font-size: 5px; color: var(--gb-dark); text-align: center; }
-
   .detail-row { display: flex; justify-content: space-between; font-size: 8px; color: var(--gb-dark); padding: 6px 0; border-bottom: 1px solid rgba(48,98,48,0.3); }
   .detail-row span:last-child { color: var(--gb-darkest); }
 
@@ -120,7 +131,6 @@ const style = `
 `;
 
 /* ── types ── */
-interface WordEvent { word: string; correct: boolean; sec?: number; ts?: number; }
 interface HistoryRecord {
   wpm: number; acc: number; timeLimit: number;
   language: string; difficulty: string;
@@ -134,58 +144,29 @@ type SortType   = 'date' | 'wpm' | 'acc';
 
 function formatDate(iso: string): string {
   const d   = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/* ── mini chart inside detail ── */
+/* ── mini chart inside detail (uses shared buildChartData) ── */
 function MiniChart({ wordEvents, timeLimit }: { wordEvents: WordEvent[]; timeLimit: number }) {
-  const [tooltip, setTooltip] = useState<{x:number;y:number;wpm:number;sec:number}|null>(null);
-  if (!wordEvents.length) return <div style={{ fontSize:'7px', color:'var(--gb-dark)', padding:'12px 0' }}>No chart data</div>;
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; wpm: number; sec: number } | null>(null);
+  if (!wordEvents.length) return <div style={{ fontSize: '7px', color: 'var(--gb-dark)', padding: '12px 0' }}>No chart data</div>;
 
-  const wBySecond: number[] = Array(timeLimit).fill(0);
-  wordEvents.forEach(ev => {
-    if (ev.correct) {
-      const rawSec = ev.sec !== undefined ? ev.sec : Math.floor((ev.ts ?? 0) / 1000);
-      const idx = Math.min(Math.max(0, rawSec), timeLimit - 1);
-      wBySecond[idx]++;
-    }
-  });
-  let cumWords = 0;
-  const wpmPts: number[] = wBySecond.map((w, i) => {
-    cumWords += w;
-    return Math.round(cumWords / ((i + 1) / 60));
-  });
-  const maxWpm = Math.max(1, ...wpmPts);
+  const { pts, wpmPts, maxWpm, linePath, areaPath } = buildChartData(wordEvents, timeLimit);
   const CHART_H = 80;
-  const step = timeLimit <= 30 ? 5 : timeLimit <= 60 ? 10 : 20;
-  const pts = wpmPts.map((v, i) => ({
-    x: ((i + 0.5) / timeLimit) * 100,
-    y: ((maxWpm - v) / maxWpm) * 100,
-    wpm: v, sec: i + 1,
-  }));
-  function smoothPath(ps: {x:number;y:number}[]): string {
-    if (ps.length < 2) return `M${ps[0].x},${ps[0].y}`;
-    let d = `M${ps[0].x},${ps[0].y}`;
-    for (let i = 1; i < ps.length; i++) {
-      const cpx = (ps[i-1].x + ps[i].x) / 2;
-      d += ` C${cpx},${ps[i-1].y} ${cpx},${ps[i].y} ${ps[i].x},${ps[i].y}`;
-    }
-    return d;
-  }
-  const linePath = smoothPath(pts);
-  const areaPath = `${linePath} L${pts[pts.length-1].x},100 L${pts[0].x},100 Z`;
+  const step    = timeLimit <= 30 ? 5 : timeLimit <= 60 ? 10 : 20;
 
   return (
     <div>
-      <div style={{ fontSize:'7px', color:'var(--gb-dark)', letterSpacing:'2px', marginBottom:'8px' }}>WPM OVER TIME</div>
+      <div style={{ fontSize: '7px', color: 'var(--gb-dark)', letterSpacing: '2px', marginBottom: '8px' }}>WPM OVER TIME</div>
 
-      <div style={{ position:'relative', width:'100%', height:`${CHART_H}px` }}>
+      <div style={{ position: 'relative', width: '100%', height: `${CHART_H}px` }}>
         <svg width="100%" height="100%" viewBox="0 0 100 100"
           preserveAspectRatio="none"
-          style={{ display:'block', overflow:'visible', position:'absolute', inset:0 }}>
+          style={{ display: 'block', overflow: 'visible', position: 'absolute', inset: 0 }}>
           {[0.25, 0.5, 0.75].map((t, i) => (
-            <line key={i} x1="0" y1={t*100} x2="100" y2={t*100}
+            <line key={i} x1="0" y1={t * 100} x2="100" y2={t * 100}
               stroke="var(--gb-dark)" strokeWidth="0.4" strokeDasharray="2 2"
               vectorEffect="non-scaling-stroke" />
           ))}
@@ -194,50 +175,50 @@ function MiniChart({ wordEvents, timeLimit }: { wordEvents: WordEvent[]; timeLim
             strokeWidth="2" vectorEffect="non-scaling-stroke" />
         </svg>
 
-        {pts.map((p, i) => (
+        {pts.map((p: { x: number; y: number; wpm: number; sec: number }, i: number) => (
           <div key={i}
             onMouseEnter={() => setTooltip(p)}
             onMouseLeave={() => setTooltip(null)}
             style={{
-              position:'absolute', left:`${p.x}%`, top:`${p.y}%`,
-              width:10, height:10, borderRadius:'50%',
-              background:'var(--gb-darkest)', border:'none',
-              transform:'translate(-50%, calc(-100% - 3px))', cursor:'crosshair', zIndex:2,
+              position: 'absolute', left: `${p.x}%`, top: `${p.y}%`,
+              width: 10, height: 10, borderRadius: '50%',
+              background: 'var(--gb-darkest)', border: 'none',
+              transform: 'translate(-50%, calc(-100% - 3px))', cursor: 'crosshair', zIndex: 2,
             }} />
         ))}
 
         {tooltip && (
           <div style={{
-            position:'absolute', left:`${tooltip.x}%`, top:`${tooltip.y}%`,
-            transform:'translate(-50%,-140%)',
-            background:'var(--gb-darkest)', color:'var(--gb-mid)',
-            fontSize:'7px', padding:'4px 8px',
-            border:'2px solid var(--gb-mid)', whiteSpace:'nowrap',
-            pointerEvents:'none', zIndex:10,
-            boxShadow:'2px 2px 0 var(--gb-dark)',
+            position: 'absolute', left: `${tooltip.x}%`, top: `${tooltip.y}%`,
+            transform: 'translate(-50%,-140%)',
+            background: 'var(--gb-darkest)', color: 'var(--gb-mid)',
+            fontSize: '7px', padding: '4px 8px',
+            border: '2px solid var(--gb-mid)', whiteSpace: 'nowrap',
+            pointerEvents: 'none', zIndex: 10,
+            boxShadow: '2px 2px 0 var(--gb-dark)',
           }}>
             {tooltip.sec}s — {tooltip.wpm} wpm
           </div>
         )}
 
-        <div style={{ position:'absolute', top:0, left:0, height:'100%', display:'flex', flexDirection:'column', justifyContent:'space-between', pointerEvents:'none' }}>
-          {[maxWpm, Math.round(maxWpm*0.75), Math.round(maxWpm*0.5), Math.round(maxWpm*0.25), 0].map((v,i) => (
-            <span key={i} style={{ fontSize:'5px', color:'var(--gb-dark)', lineHeight:1 }}>{v}</span>
+        <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
+          {[maxWpm, Math.round(maxWpm * 0.75), Math.round(maxWpm * 0.5), Math.round(maxWpm * 0.25), 0].map((v: number, i: number) => (
+            <span key={i} style={{ fontSize: '5px', color: 'var(--gb-dark)', lineHeight: 1 }}>{v}</span>
           ))}
         </div>
       </div>
 
-      <div style={{ display:'flex', marginTop:'4px' }}>
-        {wpmPts.map((_,i) => (
-          <span key={i} style={{ flex:1, fontSize:'5px', color:'var(--gb-dark)', textAlign:'center' }}>
-            {(i+1) % step === 0 ? i+1 : ''}
+      <div style={{ display: 'flex', marginTop: '4px' }}>
+        {wpmPts.map((_: number, i: number) => (
+          <span key={i} style={{ flex: 1, fontSize: '5px', color: 'var(--gb-dark)', textAlign: 'center' }}>
+            {(i + 1) % step === 0 ? i + 1 : ''}
           </span>
         ))}
       </div>
 
-      <div style={{ display:'flex', gap:'16px', marginTop:'6px', fontSize:'7px', color:'var(--gb-dark)' }}>
-        <span>PEAK <span style={{ color:'var(--gb-darkest)' }}>{Math.max(...wpmPts)}</span></span>
-        <span>AVG <span style={{ color:'var(--gb-darkest)' }}>{Math.round(wpmPts.reduce((a,b)=>a+b,0)/wpmPts.length)}</span></span>
+      <div style={{ display: 'flex', gap: '16px', marginTop: '6px', fontSize: '7px', color: 'var(--gb-dark)' }}>
+        <span>PEAK <span style={{ color: 'var(--gb-darkest)' }}>{Math.max(...wpmPts)}</span></span>
+        <span>AVG <span style={{ color: 'var(--gb-darkest)' }}>{Math.round(wpmPts.reduce((a: number, b: number) => a + b, 0) / wpmPts.length)}</span></span>
       </div>
     </div>
   );
@@ -249,20 +230,20 @@ function DetailModal({ record, onClose }: { record: HistoryRecord; onClose: () =
     <div className="detail-overlay" onClick={onClose}>
       <div className="detail-panel fadein" onClick={e => e.stopPropagation()}>
 
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
-          <div style={{ fontSize:'9px', color:'var(--gb-dark)', letterSpacing:'3px' }}>RESULT DETAIL</div>
-          <button className="pixel-btn" onClick={onClose} style={{ fontSize:'7px', padding:'4px 10px' }}>X CLOSE</button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+          <div style={{ fontSize: '9px', color: 'var(--gb-dark)', letterSpacing: '3px' }}>RESULT DETAIL</div>
+          <button className="pixel-btn" onClick={onClose} style={{ fontSize: '7px', padding: '4px 10px' }}>X CLOSE</button>
         </div>
-        <div style={{ fontSize:'7px', color:'var(--gb-dark)', marginBottom:'8px', opacity:0.7 }}>{formatDate(record.date)}</div>
+        <div style={{ fontSize: '7px', color: 'var(--gb-dark)', marginBottom: '8px', opacity: 0.7 }}>{formatDate(record.date)}</div>
 
         <div className="pixel-divider" />
 
-        <div style={{ display:'flex', gap:'clamp(12px,3vw,32px)', flexWrap:'wrap', marginBottom:'12px' }}>
+        <div style={{ display: 'flex', gap: 'clamp(12px,3vw,32px)', flexWrap: 'wrap', marginBottom: '12px' }}>
           {[
-            { lbl:'WPM',     val: record.wpm },
-            { lbl:'ACC',     val: `${record.acc}%` },
-            { lbl:'CORRECT', val: record.correctWordsCount },
-            { lbl:'WRONG',   val: record.wrongWordsCount },
+            { lbl: 'WPM',     val: record.wpm },
+            { lbl: 'ACC',     val: `${record.acc}%` },
+            { lbl: 'CORRECT', val: record.correctWordsCount },
+            { lbl: 'WRONG',   val: record.wrongWordsCount },
           ].map(s => (
             <div key={s.lbl} className="detail-stat">
               <div className="detail-stat-lbl">{s.lbl}</div>
@@ -275,15 +256,15 @@ function DetailModal({ record, onClose }: { record: HistoryRecord; onClose: () =
 
         {record.wordEvents && record.wordEvents.length > 0
           ? <MiniChart wordEvents={record.wordEvents} timeLimit={record.timeLimit} />
-          : <div style={{ fontSize:'7px', color:'var(--gb-dark)', padding:'8px 0' }}>No chart data (old record)</div>
+          : <div style={{ fontSize: '7px', color: 'var(--gb-dark)', padding: '8px 0' }}>No chart data (old record)</div>
         }
 
         <div className="pixel-divider" />
 
         {[
-          { lbl:'TEST',       val:`${record.timeLimit}s / ${record.language} / ${record.difficulty}` },
-          { lbl:'KEYSTROKES', val:`${record.keystrokes.correct} correct  /  ${record.keystrokes.wrong} wrong` },
-          { lbl:'WORDS',      val:`${record.correctWordsCount} correct  /  ${record.wrongWordsCount} wrong` },
+          { lbl: 'TEST',       val: `${record.timeLimit}s / ${record.language} / ${record.difficulty}` },
+          { lbl: 'KEYSTROKES', val: `${record.keystrokes.correct} correct  /  ${record.keystrokes.wrong} wrong` },
+          { lbl: 'WORDS',      val: `${record.correctWordsCount} correct  /  ${record.wrongWordsCount} wrong` },
         ].map(r => (
           <div key={r.lbl} className="detail-row"><span>{r.lbl}</span><span>{r.val}</span></div>
         ))}
@@ -296,10 +277,12 @@ function DetailModal({ record, onClose }: { record: HistoryRecord; onClose: () =
 /* ── main page ── */
 export default function HistoryPage() {
   const router = useRouter();
-  const [history,    setHistory]    = useState<HistoryRecord[]>([]);
-  const [filter,     setFilter]     = useState<FilterType>('all');
-  const [sortBy,     setSortBy]     = useState<SortType>('date');
-  const [selected,   setSelected]   = useState<HistoryRecord | null>(null);
+  const [history,      setHistory]      = useState<HistoryRecord[]>([]);
+  const [filter,       setFilter]       = useState<FilterType>('all');
+  const [sortBy,       setSortBy]       = useState<SortType>('date');
+  const [selected,     setSelected]     = useState<HistoryRecord | null>(null);
+  /* FIX 4: inline confirm state — replaces window.confirm() which breaks on iOS PWA */
+  const [confirmClear, setConfirmClear] = useState<boolean>(false);
 
   useEffect(() => {
     try {
@@ -308,57 +291,63 @@ export default function HistoryPage() {
     } catch { setHistory([]); }
   }, []);
 
-  const clearHistory = () => {
-    if (confirm('Clear all history?')) { localStorage.removeItem('pixeltype_history'); setHistory([]); }
+  /* FIX 4: no more window.confirm() */
+  const handleClearRequest = () => setConfirmClear(true);
+  const handleClearConfirm = () => {
+    localStorage.removeItem('pixeltype_history');
+    setHistory([]);
+    setConfirmClear(false);
   };
+  const handleClearCancel = () => setConfirmClear(false);
 
   const filtered: HistoryRecord[] = history
     .filter(r => filter === 'all' || r.difficulty === filter)
-    .sort((a,b) => {
+    .sort((a, b) => {
       if (sortBy === 'wpm') return b.wpm - a.wpm;
       if (sortBy === 'acc') return b.acc - a.acc;
       return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
 
   const bestWpm = history.length ? Math.max(...history.map(r => r.wpm)) : 0;
-  const avgWpm  = history.length ? Math.round(history.reduce((s,r) => s+r.wpm, 0) / history.length) : 0;
+  const avgWpm  = history.length ? Math.round(history.reduce((s, r) => s + r.wpm, 0) / history.length) : 0;
   const bestAcc = history.length ? Math.max(...history.map(r => r.acc)) : 0;
 
   const filterOpts: { value: FilterType; label: string }[] = [
-    { value:'all',    label:'all' },
-    { value:'normal', label:'normal' },
-    { value:'hard',   label:'hard' },
+    { value: 'all',    label: 'all' },
+    { value: 'normal', label: 'normal' },
+    { value: 'hard',   label: 'hard' },
   ];
   const sortOpts: { value: SortType; label: string }[] = [
-    { value:'date', label:'DATE' },
-    { value:'wpm',  label:'WPM' },
-    { value:'acc',  label:'ACC' },
+    { value: 'date', label: 'DATE' },
+    { value: 'wpm',  label: 'WPM' },
+    { value: 'acc',  label: 'ACC' },
   ];
 
   return (
     <>
       <style>{style}</style>
+
       {selected && <DetailModal record={selected} onClose={() => setSelected(null)} />}
 
       <div className="gb-bg">
-        <header style={{ width:'100%', maxWidth:'1100px', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+        <header style={{ width: '100%', maxWidth: '1100px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div className="gb-logo">PIXELTYPE <span>v1.0</span></div>
           <button className="pixel-btn" onClick={() => router.push('/')}
-            style={{ textTransform:'uppercase', letterSpacing:'1px', fontSize:'7px' }}>
+            style={{ textTransform: 'uppercase', letterSpacing: '1px', fontSize: '7px' }}>
             BACK
           </button>
         </header>
 
-        <main style={{ width:'100%', maxWidth:'1100px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <main style={{ width: '100%', maxWidth: '1100px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
           {/* summary */}
           {history.length > 0 && (
             <div className="summary-grid fadein">
               {[
-                { lbl:'BEST WPM', val: bestWpm },
-                { lbl:'AVG WPM',  val: avgWpm },
-                { lbl:'BEST ACC', val: `${bestAcc}%` },
-                { lbl:'GAMES',    val: history.length },
+                { lbl: 'BEST WPM', val: bestWpm },
+                { lbl: 'AVG WPM',  val: avgWpm },
+                { lbl: 'BEST ACC', val: `${bestAcc}%` },
+                { lbl: 'GAMES',    val: history.length },
               ].map(c => (
                 <div key={c.lbl} className="summary-card screen-texture">
                   <div className="stat-val">{c.val}</div>
@@ -369,32 +358,44 @@ export default function HistoryPage() {
           )}
 
           {/* controls */}
-          <div style={{ display:'flex', flexWrap:'wrap', gap:'8px', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', justifyContent: 'space-between' }}>
             <div className="controls-bar">
-              <span style={{ fontSize:'7px', color:'var(--gb-dark)', letterSpacing:'1px' }}>FILTER</span>
+              <span style={{ fontSize: '7px', color: 'var(--gb-dark)', letterSpacing: '1px' }}>FILTER</span>
               {filterOpts.map(f => (
-                <button key={f.value} className={`pixel-btn${filter===f.value?' sel':''}`} onClick={() => setFilter(f.value)}>{f.label}</button>
+                <button key={f.value} className={`pixel-btn${filter === f.value ? ' sel' : ''}`} onClick={() => setFilter(f.value)}>{f.label}</button>
               ))}
-              <div style={{ width:'2px', height:'20px', background:'var(--gb-dark)' }} />
-              <span style={{ fontSize:'7px', color:'var(--gb-dark)', letterSpacing:'1px' }}>SORT</span>
+              <div style={{ width: '2px', height: '20px', background: 'var(--gb-dark)' }} />
+              <span style={{ fontSize: '7px', color: 'var(--gb-dark)', letterSpacing: '1px' }}>SORT</span>
               {sortOpts.map(s => (
-                <button key={s.value} className={`pixel-btn${sortBy===s.value?' sel':''}`} onClick={() => setSortBy(s.value)}>{s.label}</button>
+                <button key={s.value} className={`pixel-btn${sortBy === s.value ? ' sel' : ''}`} onClick={() => setSortBy(s.value)}>{s.label}</button>
               ))}
             </div>
+
+            {/* FIX 4: inline two-step confirm instead of window.confirm() */}
             {history.length > 0 && (
-              <button className="pixel-btn-danger" onClick={clearHistory}>CLEAR ALL</button>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                {confirmClear ? (
+                  <>
+                    <span style={{ fontSize: '7px', color: '#ff6b6b', letterSpacing: '1px' }}>SURE?</span>
+                    <button className="pixel-btn-confirm" onClick={handleClearConfirm}>YES</button>
+                    <button className="pixel-btn-cancel"  onClick={handleClearCancel}>NO</button>
+                  </>
+                ) : (
+                  <button className="pixel-btn-danger" onClick={handleClearRequest}>CLEAR ALL</button>
+                )}
+              </div>
             )}
           </div>
 
           {/* table */}
           <div className="gb-screen screen-texture fadein">
-            <div style={{ fontSize:'9px', color:'var(--gb-dark)', letterSpacing:'3px', padding:'14px 14px 0' }}>HISTORY</div>
-            <div className="pixel-divider" style={{ margin:'10px 14px' }} />
+            <div style={{ fontSize: '9px', color: 'var(--gb-dark)', letterSpacing: '3px', padding: '14px 14px 0' }}>HISTORY</div>
+            <div className="pixel-divider" style={{ margin: '10px 14px' }} />
 
             {filtered.length === 0 ? (
               <div className="empty-state">
                 {history.length === 0
-                  ? <><div>NO RECORDS YET</div><div style={{ fontSize:'7px', marginTop:'8px', opacity:0.7 }}>complete a game to start tracking</div></>
+                  ? <><div>NO RECORDS YET</div><div style={{ fontSize: '7px', marginTop: '8px', opacity: 0.7 }}>complete a game to start tracking</div></>
                   : <div>NO RESULTS FOR THIS FILTER</div>
                 }
               </div>
@@ -409,17 +410,17 @@ export default function HistoryPage() {
                   <span className="col-mode">MODE</span>
                 </div>
                 {filtered.map((r, i) => {
-                  const rankCls = sortBy==='wpm'
-                    ? (i===0 ? 'rank-gold' : i===1 ? 'rank-silver' : i===2 ? 'rank-bronze' : '')
+                  const rankCls = sortBy === 'wpm'
+                    ? (i === 0 ? 'rank-gold' : i === 1 ? 'rank-silver' : i === 2 ? 'rank-bronze' : '')
                     : '';
                   return (
-                    <div key={i} className="tbl-row fadein" style={{ animationDelay:`${i*0.025}s` }}
+                    <div key={i} className="tbl-row fadein" style={{ animationDelay: `${i * 0.025}s` }}
                       onClick={() => setSelected(r)} title="Click to view details">
-                      <span style={{ fontSize:'6px', opacity:0.75 }}>{formatDate(r.date)}</span>
-                      <span className={rankCls} style={{ fontWeight:'bold' }}>{r.wpm}</span>
+                      <span style={{ fontSize: '6px', opacity: 0.75 }}>{formatDate(r.date)}</span>
+                      <span className={rankCls} style={{ fontWeight: 'bold' }}>{r.wpm}</span>
                       <span>{r.acc}%</span>
                       <span>{r.timeLimit}s</span>
-                      <span className="col-lang" style={{ textTransform:'uppercase' }}>{r.language}</span>
+                      <span className="col-lang" style={{ textTransform: 'uppercase' }}>{r.language}</span>
                       <span className="col-mode">
                         <span className={`badge badge-${r.difficulty}`}>{r.difficulty}</span>
                       </span>
@@ -430,7 +431,7 @@ export default function HistoryPage() {
             )}
           </div>
 
-          <div style={{ fontSize:'7px', color:'var(--gb-dark)', opacity:0.6, textAlign:'center' }}>
+          <div style={{ fontSize: '7px', color: 'var(--gb-dark)', opacity: 0.6, textAlign: 'center' }}>
             CLICK ANY ROW TO VIEW DETAILS
           </div>
         </main>

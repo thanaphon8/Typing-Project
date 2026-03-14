@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { buildChartData, buildWpmPoints, WordEvent } from '../lib/chartUtils';
 
 /* ═══════════════════════════ CSS ═══════════════════════════ */
 const style = `
@@ -127,14 +128,44 @@ const style = `
     border: 2px solid var(--gb-darkest); box-shadow: 2px 2px 0 var(--gb-darkest);
     padding: 2px 6px; font-size: 7px;
   }
+
+  /* ── language warning toast ── */
+  .lang-warn-toast {
+    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+    z-index: 1000; display: flex; align-items: center; gap: 10px;
+    background: var(--gb-darkest); color: var(--gb-mid);
+    border: 3px solid var(--gb-mid);
+    box-shadow: 4px 4px 0 var(--gb-dark), 0 0 0 1px var(--gb-darkest);
+    padding: 10px 18px; font-size: 8px; letter-spacing: 1px;
+    white-space: nowrap; pointer-events: none;
+    animation: toast-in 0.15s steps(2) forwards;
+  }
+  .lang-warn-icon { font-size: 14px; line-height: 1; }
+  .lang-warn-bar {
+    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+    z-index: 999; height: 3px; background: var(--gb-mid);
+    animation: toast-bar 3s linear forwards;
+    pointer-events: none;
+  }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+  @keyframes toast-bar {
+    from { width: 260px; }
+    to   { width: 0px; }
+  }
+  @keyframes toast-out {
+    from { opacity: 1; } to { opacity: 0; }
+  }
 `;
 
 /* ═══════════════════════════ DATA ═══════════════════════════ */
-const FAIRY_TALE_TEXT: Record<string,string> = {
+const FAIRY_TALE_TEXT: Record<string, string> = {
   en: `Once upon a time in a land far away there lived a young girl named Elara who had hair as dark as midnight and eyes like two bright stars she spent her days wandering through the ancient forest collecting fallen leaves and whispering secrets to the old oak trees one morning she discovered a tiny door carved into the roots of the oldest tree in the wood pushing it open she found a golden staircase spiraling down into the earth at the bottom waited a small fox with a silver tail who bowed and said welcome dear traveler we have waited long for you to arrive the fox led her through glowing tunnels past rivers of amber and bridges made of moonbeam she saw castles built from crystal and gardens where flowers sang soft lullabies in the evening breeze the girl was not afraid because the forest had always been her friend and magic felt as natural as breathing when she finally returned home the sunrise painted the sky in shades of rose and honey and she carried in her heart a warmth that no winter could ever touch`,
   th: `กาลครั้งหนึ่งนานมาแล้ว ในดินแดนที่ห่างไกล มีเด็กหญิงคนหนึ่งชื่อ เอลารา เธอมีผมดำสลวยดั่งราตรีและดวงตาสว่างดั่งดาว เธอใช้เวลาทุกวันเดินเล่นในป่าโบราณ เก็บใบไม้ที่ร่วงหล่นและกระซิบความลับกับต้นโอ๊กเก่าแก่ เช้าวันหนึ่งเธอพบประตูเล็กๆ แกะสลักอยู่ที่รากของต้นไม้ที่เก่าแก่ที่สุด เมื่อเปิดออกพบบันไดทองคำวกวนลงสู่พื้นดิน ที่ปลายบันไดมีสุนัขจิ้งจอกตัวเล็กหางเงินรอคอยอยู่ มันก้มหัวและพูดว่า ยินดีต้อนรับนักเดินทาง เราได้รอคอยคุณมานานแล้ว สุนัขจิ้งจอกนำเธอผ่านอุโมงค์เรืองแสง แม่น้ำอำพัน และสะพานที่สร้างจากแสงจันทร์ เธอเห็นปราสาทสร้างจากคริสตัลและสวนที่ดอกไม้ร้องเพลงกล่อมในสายลมยามเย็น เด็กหญิงไม่กลัวเลย เพราะป่าคือเพื่อนเก่าของเธอ และเวทมนตร์รู้สึกเป็นธรรมชาติดั่งการหายใจ`,
 };
-const SAMPLE_WORDS: Record<string,string[]> = {
+const SAMPLE_WORDS: Record<string, string[]> = {
   en: ["the","be","to","of","and","a","in","that","have","it","for","not","on","with","he","as","you","do","at","this","but","his","by","from","they","we","say","her","she","or","an","will","my","one","all","would","there","their","what","so","up","out","if","about","who","get","which","go","me","when","make","can","like","time","no","just"],
   th: ["และ","ที่","เป็น","ใน","การ","มี","ได้","ให้","ไป","ของ","จะ","ไม่","กับ","มา","ความ","ก็","ด้วย","นี้","ว่า","จาก","ผู้","หรือ","อย่าง","คือ","แล้ว","อาจ","ต้อง","คน","ซึ่ง","เรา","ท่าน","เพื่อ","นั้น","มาก","หนึ่ง","ส่วน","ขึ้น","เขา"],
 };
@@ -143,7 +174,6 @@ const HISTORY_ROUTE  = '/history';
 
 /* ═══════════════════════════ TYPES ═══════════════════════════ */
 interface KeystrokeStats { correct: number; wrong: number; }
-interface WordEvent       { word: string; correct: boolean; sec: number; }
 interface Stats {
   wpm: number; keystrokes: KeystrokeStats;
   correctWordsCount: number; wrongWordsCount: number;
@@ -166,7 +196,7 @@ function getFairyTaleWords(lang: string): string[] {
   while (arr.length < 300) arr.push(...base);
   return arr.slice(0, 300);
 }
-function saveResult(r: Omit<HistoryRecord,'date'>): void {
+function saveResult(r: Omit<HistoryRecord, 'date'>): void {
   try {
     const existing = JSON.parse(localStorage.getItem('pixeltype_history') ?? '[]') as HistoryRecord[];
     existing.unshift({ ...r, date: new Date().toISOString() });
@@ -178,18 +208,18 @@ function loadSettings(): SavedSettings {
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') as Partial<SavedSettings>;
     return {
-      language:   ['en','th'].includes(s.language ?? '')       ? s.language!   : 'en',
+      language:   ['en','th'].includes(s.language ?? '')        ? s.language!   : 'en',
       difficulty: ['normal','hard'].includes(s.difficulty ?? '') ? s.difficulty! : 'normal',
-      timeLimit:  [30,60,120].includes(s.timeLimit ?? 0)       ? s.timeLimit!  : 60,
+      timeLimit:  [30,60,120].includes(s.timeLimit ?? 0)        ? s.timeLimit!  : 60,
     };
-  } catch { return { language:'en', difficulty:'normal', timeLimit:60 }; }
+  } catch { return { language: 'en', difficulty: 'normal', timeLimit: 60 }; }
 }
 function persistSettings(s: SavedSettings): void {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch { /* ignore */ }
 }
 
 /* ═══════════════════════════ CONFETTI ═══════════════════════════ */
-interface Particle { id:number; x:number; y:number; vx:number; vy:number; rot:number; vrot:number; color:string; w:number; h:number; }
+interface Particle { id: number; x: number; y: number; vx: number; vy: number; rot: number; vrot: number; color: string; w: number; h: number; }
 function Confetti({ active }: { active: boolean }) {
   const [particles, setParticles] = useState<Particle[]>([]);
   const raf = useRef<number>(0);
@@ -214,7 +244,7 @@ function Confetti({ active }: { active: boolean }) {
     const tick = () => {
       frame++;
       setParticles(prev => prev
-        .map(p => ({ ...p, x: p.x+p.vx, y: p.y+p.vy, vy: p.vy+0.12, rot: p.rot+p.vrot }))
+        .map(p => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, vy: p.vy + 0.12, rot: p.rot + p.vrot }))
         .filter(p => p.y < 120)
       );
       if (frame < 120) raf.current = requestAnimationFrame(tick);
@@ -225,14 +255,14 @@ function Confetti({ active }: { active: boolean }) {
 
   if (!particles.length) return null;
   return (
-    <div style={{ position:'absolute', inset:0, pointerEvents:'none', overflow:'hidden', zIndex:50 }}>
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 50 }}>
       {particles.map(p => (
         <div key={p.id} style={{
-          position:'absolute',
-          left:`${p.x}%`, top:`${p.y}%`,
-          width:`${p.w}px`, height:`${p.h}px`,
+          position: 'absolute',
+          left: `${p.x}%`, top: `${p.y}%`,
+          width: `${p.w}px`, height: `${p.h}px`,
           background: p.color,
-          transform:`rotate(${p.rot}deg)`,
+          transform: `rotate(${p.rot}deg)`,
           opacity: 0.9,
         }} />
       ))}
@@ -254,7 +284,7 @@ function WpmProgressBar({ wpm }: { wpm: number }) {
     const target   = Math.min(wpm, MAX_WPM);
     const animate  = (ts: number) => {
       if (!start) start = ts;
-      const t = Math.min((ts - start) / duration, 1);
+      const t    = Math.min((ts - start) / duration, 1);
       const ease = 1 - Math.pow(1 - t, 5);
       setDisplayed(Math.round(ease * target));
       if (t < 1) requestAnimationFrame(animate);
@@ -266,42 +296,44 @@ function WpmProgressBar({ wpm }: { wpm: number }) {
   const fillPct = Math.min((displayed / MAX_WPM) * 100, 100);
 
   return (
-    <div style={{ width:'100%' }}>
-      <div style={{ fontSize:'7px', color:'var(--gb-dark)', letterSpacing:'2px', marginBottom:'10px' }}>
+    <div style={{ width: '100%' }}>
+      <div style={{ fontSize: '7px', color: 'var(--gb-dark)', letterSpacing: '2px', marginBottom: '10px' }}>
         WPM DISTANCE
       </div>
-      <div style={{ position:'relative', width:'100%', height:'22px',
-        background:'rgba(15,56,15,0.35)', border:'3px solid var(--gb-dark)',
-        boxShadow:'inset 0 2px 0 rgba(0,0,0,0.25)', overflow:'visible' }}>
+      <div style={{
+        position: 'relative', width: '100%', height: '22px',
+        background: 'rgba(15,56,15,0.35)', border: '3px solid var(--gb-dark)',
+        boxShadow: 'inset 0 2px 0 rgba(0,0,0,0.25)', overflow: 'visible',
+      }}>
         <div style={{
-          position:'absolute', top:0, left:0, bottom:0,
-          width:`${fillPct}%`,
-          background:'var(--gb-darkest)',
-          boxShadow:'2px 0 0 var(--gb-dark)',
+          position: 'absolute', top: 0, left: 0, bottom: 0,
+          width: `${fillPct}%`,
+          background: 'var(--gb-darkest)',
+          boxShadow: '2px 0 0 var(--gb-dark)',
         }} />
         <div style={{
-          position:'absolute', top:'3px', left:0, right:0, height:'3px',
-          background:'rgba(255,255,255,0.07)', pointerEvents:'none',
+          position: 'absolute', top: '3px', left: 0, right: 0, height: '3px',
+          background: 'rgba(255,255,255,0.07)', pointerEvents: 'none',
         }} />
         {WPM_FLAGS.map(flag => {
-          const pos = (flag / MAX_WPM) * 100;
+          const pos    = (flag / MAX_WPM) * 100;
           const passed = displayed >= flag;
           return (
             <div key={flag} style={{
-              position:'absolute', left:`${pos}%`, top:'-2px',
-              transform:'translateX(-50%)',
-              display:'flex', flexDirection:'column', alignItems:'center',
+              position: 'absolute', left: `${pos}%`, top: '-2px',
+              transform: 'translateX(-50%)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
               zIndex: 3,
             }}>
-              <div style={{ width:'2px', height:'28px', background: passed ? 'var(--gb-mid)' : 'var(--gb-dark)' }} />
+              <div style={{ width: '2px', height: '28px', background: passed ? 'var(--gb-mid)' : 'var(--gb-dark)' }} />
               <div style={{
-                position:'absolute', top:0, left:'2px',
-                width:'14px', height:'9px',
+                position: 'absolute', top: 0, left: '2px',
+                width: '14px', height: '9px',
                 background: passed ? 'var(--gb-mid)' : 'var(--gb-dark)',
                 border: `1px solid ${passed ? 'var(--gb-darkest)' : 'rgba(15,56,15,0.5)'}`,
-                display:'flex', alignItems:'center', justifyContent:'center',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <span style={{ fontSize:'4px', color: passed ? 'var(--gb-darkest)' : 'rgba(15,56,15,0.6)', lineHeight:1 }}>
+                <span style={{ fontSize: '4px', color: passed ? 'var(--gb-darkest)' : 'rgba(15,56,15,0.6)', lineHeight: 1 }}>
                   {flag}
                 </span>
               </div>
@@ -310,18 +342,18 @@ function WpmProgressBar({ wpm }: { wpm: number }) {
         })}
         {fillPct > 0 && (
           <div style={{
-            position:'absolute', top:'50%', left:`${fillPct}%`,
-            width:'12px', height:'12px', borderRadius:'50%',
-            background:'var(--gb-mid)', border:'3px solid var(--gb-darkest)',
-            boxShadow:'0 0 0 2px var(--gb-dark)',
-            transform:'translate(-50%,-50%)',
-            zIndex:4,
+            position: 'absolute', top: '50%', left: `${fillPct}%`,
+            width: '12px', height: '12px', borderRadius: '50%',
+            background: 'var(--gb-mid)', border: '3px solid var(--gb-darkest)',
+            boxShadow: '0 0 0 2px var(--gb-dark)',
+            transform: 'translate(-50%,-50%)',
+            zIndex: 4,
           }} />
         )}
       </div>
-      <div style={{ display:'flex', justifyContent:'space-between', marginTop:'6px', fontSize:'6px', color:'var(--gb-dark)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '6px', color: 'var(--gb-dark)' }}>
         <span>0</span>
-        <span style={{ color:'var(--gb-darkest)', fontSize:'7px' }}>{wpm} WPM</span>
+        <span style={{ color: 'var(--gb-darkest)', fontSize: '7px' }}>{wpm} WPM</span>
         <span>{MAX_WPM}+</span>
       </div>
     </div>
@@ -329,60 +361,26 @@ function WpmProgressBar({ wpm }: { wpm: number }) {
 }
 
 /* ═══════════════════════════ CHART ═══════════════════════════ */
-function buildChartData(wordEvents: WordEvent[], timeLimit: number) {
-  const wBySecond: number[] = Array(timeLimit).fill(0);
-  wordEvents.forEach(ev => {
-    if (ev.correct) {
-      const idx = Math.max(0, Math.min(ev.sec, timeLimit - 1));
-      wBySecond[idx]++;
-    }
-  });
-  let cumWords = 0;
-  const wpmPts: number[] = wBySecond.map((w, i) => {
-    cumWords += w;
-    return Math.round(cumWords / ((i + 1) / 60));
-  });
-  const maxWpm = Math.max(1, ...wpmPts);
-  const pts = wpmPts.map((v, i) => ({
-    x: ((i + 0.5) / timeLimit) * 100,
-    y: ((maxWpm - v) / maxWpm) * 100,
-    wpm: v,
-    sec: i + 1,
-  }));
-  function smoothPath(ps: {x:number;y:number}[]): string {
-    if (ps.length < 2) return `M${ps[0].x},${ps[0].y}`;
-    let d = `M${ps[0].x},${ps[0].y}`;
-    for (let i = 1; i < ps.length; i++) {
-      const cpx = (ps[i-1].x + ps[i].x) / 2;
-      d += ` C${cpx},${ps[i-1].y} ${cpx},${ps[i].y} ${ps[i].x},${ps[i].y}`;
-    }
-    return d;
-  }
-  const linePath = smoothPath(pts);
-  const areaPath = `${linePath} L${pts[pts.length-1].x},100 L${pts[0].x},100 Z`;
-  return { pts, wpmPts, maxWpm, linePath, areaPath };
-}
-
 function ResultChart({ wordEvents, timeLimit }: { wordEvents: WordEvent[]; timeLimit: number }) {
-  const [tooltip, setTooltip] = useState<{x:number;y:number;wpm:number;sec:number} | null>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; wpm: number; sec: number } | null>(null);
   if (!wordEvents.length) return null;
 
   const { pts, wpmPts, maxWpm, linePath, areaPath } = buildChartData(wordEvents, timeLimit);
   const CHART_H = 90;
-  const step = timeLimit <= 30 ? 5 : timeLimit <= 60 ? 10 : 20;
-  const yTicks = [1, 0.75, 0.5, 0.25, 0].map(t => Math.round(maxWpm * t));
+  const step    = timeLimit <= 30 ? 5 : timeLimit <= 60 ? 10 : 20;
+  const yTicks  = [1, 0.75, 0.5, 0.25, 0].map(t => Math.round(maxWpm * t));
 
   return (
     <div>
-      <div style={{ fontSize:'7px', color:'var(--gb-dark)', letterSpacing:'2px', marginBottom:'8px' }}>
+      <div style={{ fontSize: '7px', color: 'var(--gb-dark)', letterSpacing: '2px', marginBottom: '8px' }}>
         WPM OVER TIME
       </div>
-      <div style={{ position:'relative', width:'100%', height:`${CHART_H}px` }}>
+      <div style={{ position: 'relative', width: '100%', height: `${CHART_H}px` }}>
         <svg width="100%" height="100%" viewBox="0 0 100 100"
           preserveAspectRatio="none"
-          style={{ display:'block', overflow:'visible', position:'absolute', inset:0 }}>
+          style={{ display: 'block', overflow: 'visible', position: 'absolute', inset: 0 }}>
           {[0.25, 0.5, 0.75].map((t, i) => (
-            <line key={i} x1="0" y1={t*100} x2="100" y2={t*100}
+            <line key={i} x1="0" y1={t * 100} x2="100" y2={t * 100}
               stroke="var(--gb-dark)" strokeWidth="0.4" strokeDasharray="2 2"
               vectorEffect="non-scaling-stroke" />
           ))}
@@ -390,15 +388,15 @@ function ResultChart({ wordEvents, timeLimit }: { wordEvents: WordEvent[]; timeL
           <path d={linePath} fill="none" stroke="var(--gb-darkest)"
             strokeWidth="2" vectorEffect="non-scaling-stroke" />
         </svg>
-        {pts.map((p, i) => (
+        {pts.map((p: { x: number; y: number; wpm: number; sec: number }, i: number) => (
           <div key={i}
             onMouseEnter={() => setTooltip({ x: p.x, y: p.y, wpm: p.wpm, sec: p.sec })}
             onMouseLeave={() => setTooltip(null)}
             style={{
-              position:'absolute', left:`${p.x}%`, top:`${p.y}%`,
-              width:10, height:10, borderRadius:'50%',
-              background:'var(--gb-darkest)', border:'none',
-              transform:'translate(-50%, calc(-100% - 3px))', cursor:'crosshair', zIndex:2,
+              position: 'absolute', left: `${p.x}%`, top: `${p.y}%`,
+              width: 10, height: 10, borderRadius: '50%',
+              background: 'var(--gb-darkest)', border: 'none',
+              transform: 'translate(-50%, calc(-100% - 3px))', cursor: 'crosshair', zIndex: 2,
             }} />
         ))}
         {tooltip && (
@@ -420,22 +418,22 @@ function ResultChart({ wordEvents, timeLimit }: { wordEvents: WordEvent[]; timeL
             {tooltip.sec}s — {tooltip.wpm} wpm
           </div>
         )}
-        <div style={{ position:'absolute', top:0, left:0, height:'100%', display:'flex', flexDirection:'column', justifyContent:'space-between', pointerEvents:'none' }}>
-          {yTicks.map((v, i) => (
-            <span key={i} style={{ fontSize:'5px', color:'var(--gb-dark)', lineHeight:1 }}>{v}</span>
+        <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
+          {yTicks.map((v: number, i: number) => (
+            <span key={i} style={{ fontSize: '5px', color: 'var(--gb-dark)', lineHeight: 1 }}>{v}</span>
           ))}
         </div>
       </div>
-      <div style={{ display:'flex', marginTop:'4px' }}>
-        {wpmPts.map((_,i) => (
-          <span key={i} style={{ flex:1, fontSize:'5px', color:'var(--gb-dark)', textAlign:'center' }}>
-            {(i+1) % step === 0 ? i+1 : ''}
+      <div style={{ display: 'flex', marginTop: '4px' }}>
+        {wpmPts.map((_: number, i: number) => (
+          <span key={i} style={{ flex: 1, fontSize: '5px', color: 'var(--gb-dark)', textAlign: 'center' }}>
+            {(i + 1) % step === 0 ? i + 1 : ''}
           </span>
         ))}
       </div>
-      <div style={{ display:'flex', gap:'16px', marginTop:'6px', fontSize:'7px', color:'var(--gb-dark)' }}>
-        <span>PEAK <span style={{ color:'var(--gb-darkest)' }}>{Math.max(...wpmPts)}</span></span>
-        <span>AVG <span style={{ color:'var(--gb-darkest)' }}>{Math.round(wpmPts.reduce((a,b)=>a+b,0)/wpmPts.length)}</span></span>
+      <div style={{ display: 'flex', gap: '16px', marginTop: '6px', fontSize: '7px', color: 'var(--gb-dark)' }}>
+        <span>PEAK <span style={{ color: 'var(--gb-darkest)' }}>{Math.max(...wpmPts)}</span></span>
+        <span>AVG <span style={{ color: 'var(--gb-darkest)' }}>{Math.round(wpmPts.reduce((a: number, b: number) => a + b, 0) / wpmPts.length)}</span></span>
       </div>
     </div>
   );
@@ -445,33 +443,41 @@ function ResultChart({ wordEvents, timeLimit }: { wordEvents: WordEvent[]; timeL
 export default function GameboyTyping() {
   const router = useRouter();
 
-  /* ── FIX: start with SSR-safe defaults, load from localStorage after mount ── */
+  /* ── SSR-safe: start with defaults, load from localStorage after mount ── */
   const [language,       setLangState]    = useState<string>('en');
   const [difficulty,     setDiffState]    = useState<string>('normal');
   const [timeLimit,      setTimeLimState] = useState<number>(60);
   const [settingsLoaded, setSettingsLoaded] = useState<boolean>(false);
+
+  /* FIX 1: use a ref to always hold the latest settings values,
+     preventing stale closures in persistSettings wrappers */
+  const settingsRef = useRef<SavedSettings>({ language: 'en', difficulty: 'normal', timeLimit: 60 });
+  useEffect(() => {
+    settingsRef.current = { language, difficulty, timeLimit };
+  }, [language, difficulty, timeLimit]);
 
   useEffect(() => {
     const s = loadSettings();
     setLangState(s.language);
     setDiffState(s.difficulty);
     setTimeLimState(s.timeLimit);
+    settingsRef.current = s;
     setSettingsLoaded(true);
   }, []);
 
-  /* wrappers that also persist */
+  /* FIX 1: wrappers now read current values from ref — no stale closure */
   const setLanguage = useCallback((v: string) => {
     setLangState(v);
-    persistSettings({ language: v, difficulty, timeLimit });
-  }, [difficulty, timeLimit]);
+    persistSettings({ ...settingsRef.current, language: v });
+  }, []);
   const setDifficulty = useCallback((v: string) => {
     setDiffState(v);
-    persistSettings({ language, difficulty: v, timeLimit });
-  }, [language, timeLimit]);
+    persistSettings({ ...settingsRef.current, difficulty: v });
+  }, []);
   const setTimeLimit = useCallback((v: number) => {
     setTimeLimState(v);
-    persistSettings({ language, difficulty, timeLimit: v });
-  }, [language, difficulty]);
+    persistSettings({ ...settingsRef.current, timeLimit: v });
+  }, []);
 
   const [words,            setWords]            = useState<string[]>([]);
   const [userInput,        setUserInput]        = useState<string>('');
@@ -483,22 +489,42 @@ export default function GameboyTyping() {
   const [isFocused,        setIsFocused]        = useState<boolean>(true);
   const [isNewRecord,      setIsNewRecord]      = useState<boolean>(false);
   const [stats, setStats] = useState<Stats>({
-    wpm:0, keystrokes:{correct:0,wrong:0}, correctWordsCount:0, wrongWordsCount:0, wordEvents:[],
+    wpm: 0, keystrokes: { correct: 0, wrong: 0 }, correctWordsCount: 0, wrongWordsCount: 0, wordEvents: [],
   });
-  const inputRef       = useRef<HTMLInputElement>(null);
-  const elapsedRef     = useRef<number>(0);
-  const savedRef2      = useRef<boolean>(false);
-  const statsRef       = useRef<Stats>({ wpm:0, keystrokes:{correct:0,wrong:0}, correctWordsCount:0, wrongWordsCount:0, wordEvents:[] });
+  const inputRef    = useRef<HTMLInputElement>(null);
+  const elapsedRef  = useRef<number>(0);
+  const savedRef2   = useRef<boolean>(false);
+  const statsRef    = useRef<Stats>({ wpm: 0, keystrokes: { correct: 0, wrong: 0 }, correctWordsCount: 0, wrongWordsCount: 0, wordEvents: [] });
+  const langWarnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [langWarn, setLangWarn] = useState<number>(0);
+
+  /* ── language detection ── */
+  const isThaiChar   = (ch: string) => ch >= '\u0E00' && ch <= '\u0E7F';
+  const hasThaiChar  = (s: string)  => s.split('').some(isThaiChar);
+  const hasLatinChar = (s: string)  => /[a-zA-Z]/.test(s);
+
+  const triggerLangWarn = useCallback(() => {
+    setLangWarn(c => c + 1);
+    if (langWarnRef.current) clearTimeout(langWarnRef.current);
+    langWarnRef.current = setTimeout(() => setLangWarn(0), 3000);
+  }, []);
 
   const currentPage    = Math.floor(currentWordIndex / WORDS_PER_PAGE);
-  const displayedWords = words.slice(currentPage * WORDS_PER_PAGE, (currentPage+1) * WORDS_PER_PAGE);
+  const displayedWords = words.slice(currentPage * WORDS_PER_PAGE, (currentPage + 1) * WORDS_PER_PAGE);
 
-  const generateWords = useCallback((lang=language, diff=difficulty, time=timeLimit) => {
+  /* FIX 2: generateWords no longer depends on state values directly —
+     it receives them as arguments so it stays stable and won't trigger
+     an unwanted reset when settings change mid-game. */
+  const generateWords = useCallback((
+    lang = settingsRef.current.language,
+    diff = settingsRef.current.difficulty,
+    time = settingsRef.current.timeLimit,
+  ) => {
     const newWords = diff === 'hard'
       ? getFairyTaleWords(lang)
-      : Array.from({length:300}, () => {
+      : Array.from({ length: 300 }, () => {
           const src = SAMPLE_WORDS[lang] ?? SAMPLE_WORDS['en'];
-          return src[Math.floor(Math.random()*src.length)];
+          return src[Math.floor(Math.random() * src.length)];
         });
     setWords(newWords);
     setUserInput('');
@@ -510,16 +536,33 @@ export default function GameboyTyping() {
     setIsNewRecord(false);
     elapsedRef.current = 0;
     savedRef2.current  = false;
-    const emptyStats = { wpm:0, keystrokes:{correct:0,wrong:0}, correctWordsCount:0, wrongWordsCount:0, wordEvents:[] };
+    const emptyStats = { wpm: 0, keystrokes: { correct: 0, wrong: 0 }, correctWordsCount: 0, wrongWordsCount: 0, wordEvents: [] };
     statsRef.current = emptyStats;
     setStats(emptyStats);
     setTimeout(() => inputRef.current?.focus(), 50);
-  }, [language, difficulty, timeLimit]);
+  }, []); // no external deps — reads everything from settingsRef
 
-  /* ── FIX: only generate words after settings are loaded from localStorage ── */
+  /* FIX 2: Only run once after settings are loaded from localStorage.
+     Settings button clicks call generateWords() themselves (see below). */
   useEffect(() => {
     if (settingsLoaded) generateWords();
-  }, [generateWords, settingsLoaded]);
+  }, [settingsLoaded, generateWords]);
+
+  /* FIX 2: Settings buttons now explicitly restart the game with new values */
+  const handleSetLanguage = useCallback((v: string) => {
+    setLanguage(v);
+    generateWords(v, settingsRef.current.difficulty, settingsRef.current.timeLimit);
+  }, [setLanguage, generateWords]);
+
+  const handleSetDifficulty = useCallback((v: string) => {
+    setDifficulty(v);
+    generateWords(settingsRef.current.language, v, settingsRef.current.timeLimit);
+  }, [setDifficulty, generateWords]);
+
+  const handleSetTimeLimit = useCallback((v: number) => {
+    setTimeLimit(v);
+    generateWords(settingsRef.current.language, settingsRef.current.difficulty, v);
+  }, [setTimeLimit, generateWords]);
 
   useEffect(() => {
     let iv: ReturnType<typeof setInterval> | undefined;
@@ -531,11 +574,11 @@ export default function GameboyTyping() {
     } else if (timeLeft === 0 && isActive) {
       setIsActive(false);
       setIsFinished(true);
-      // Guard with ref — runs synchronously, never duplicates even in Strict Mode
       if (!savedRef2.current) {
         savedRef2.current = true;
         const prev = statsRef.current;
-        const wpm = Math.round((prev.keystrokes.correct / 5) / (timeLimit / 60));
+        const { timeLimit: tl, language: lang, difficulty: diff } = settingsRef.current;
+        const wpm = Math.round((prev.keystrokes.correct / 5) / (tl / 60));
         const acc = Math.round((prev.correctWordsCount / (prev.correctWordsCount + prev.wrongWordsCount || 1)) * 100);
         setStats(s => ({ ...s, wpm }));
         try {
@@ -543,11 +586,18 @@ export default function GameboyTyping() {
           const prevBest = existing.length ? Math.max(...existing.map(r => r.wpm)) : 0;
           if (wpm > prevBest) setIsNewRecord(true);
         } catch { /* ignore */ }
-        saveResult({ wpm, acc, timeLimit, language, difficulty, keystrokes: prev.keystrokes, correctWordsCount: prev.correctWordsCount, wrongWordsCount: prev.wrongWordsCount, wordEvents: prev.wordEvents });
+        saveResult({
+          wpm, acc, timeLimit: tl, language: lang, difficulty: diff,
+          keystrokes: prev.keystrokes,
+          correctWordsCount: prev.correctWordsCount,
+          wrongWordsCount: prev.wrongWordsCount,
+          wordEvents: prev.wordEvents,
+        });
       }
     }
     return () => { if (iv) clearInterval(iv); };
-  }, [isActive, timeLeft, timeLimit, language, difficulty]);
+  }, [isActive, timeLeft]);
+  // FIX: removed timeLimit/language/difficulty from deps — read from settingsRef instead
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -559,6 +609,10 @@ export default function GameboyTyping() {
     if (value.endsWith(' ')) {
       const typedWord = value.trim();
       if (!typedWord) return;
+
+      if (language === 'en' && hasThaiChar(typedWord))  triggerLangWarn();
+      if (language === 'th' && hasLatinChar(typedWord)) triggerLangWarn();
+
       const isCorrect = typedWord === words[currentWordIndex];
       const sec = elapsedRef.current;
       setCorrectWords(prev => [...prev, isCorrect]);
@@ -567,13 +621,13 @@ export default function GameboyTyping() {
       setStats(prev => {
         const next = {
           ...prev,
-          correctWordsCount: isCorrect ? prev.correctWordsCount+1 : prev.correctWordsCount,
-          wrongWordsCount:   !isCorrect ? prev.wrongWordsCount+1 : prev.wrongWordsCount,
+          correctWordsCount: isCorrect ? prev.correctWordsCount + 1 : prev.correctWordsCount,
+          wrongWordsCount:   !isCorrect ? prev.wrongWordsCount + 1 : prev.wrongWordsCount,
           keystrokes: {
-            correct: prev.keystrokes.correct + (isCorrect ? typedWord.length+1 : 0),
-            wrong:   prev.keystrokes.wrong   + (!isCorrect ? typedWord.length+1 : 0),
+            correct: prev.keystrokes.correct + (isCorrect ? typedWord.length + 1 : 0),
+            wrong:   prev.keystrokes.wrong   + (!isCorrect ? typedWord.length + 1 : 0),
           },
-          wordEvents: [...prev.wordEvents, { word:typedWord, correct:isCorrect, sec }],
+          wordEvents: [...prev.wordEvents, { word: typedWord, correct: isCorrect, sec }],
         };
         statsRef.current = next;
         return next;
@@ -591,32 +645,35 @@ export default function GameboyTyping() {
       <div className="gb-bg">
 
         {/* HEADER */}
-        <header style={{ width:'100%', maxWidth:'1100px', display:'flex', alignItems:'center', marginBottom:'16px' }}>
+        <header style={{ width: '100%', maxWidth: '1100px', display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
           <div className="gb-logo">PIXELTYPE <span>v1.0</span></div>
         </header>
 
-        <main style={{ width:'100%', maxWidth:'1100px', display:'flex', flexDirection:'column', gap:'12px' }}>
+        <main style={{ width: '100%', maxWidth: '1100px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
           {/* SETTINGS BAR */}
           {!isFinished && (
-            <div style={{ opacity:isActive?0:1, pointerEvents:isActive?'none':'auto', transition:'opacity 0.25s' }}>
+            <div style={{ opacity: isActive ? 0 : 1, pointerEvents: isActive ? 'none' : 'auto', transition: 'opacity 0.25s' }}>
               <div className="settings-bar">
                 <span className="section-lbl">LANG</span>
-                {['en','th'].map(l => (
-                  <button key={l} className={`pixel-btn${language===l?' active':''}`} onClick={() => setLanguage(l)}>{l}</button>
+                {['en', 'th'].map(l => (
+                  <button key={l} className={`pixel-btn${language === l ? ' active' : ''}`}
+                    onClick={() => handleSetLanguage(l)}>{l}</button>
                 ))}
                 <div className="settings-sep" />
                 <span className="section-lbl">MODE</span>
-                {['normal','hard'].map(d => (
-                  <button key={d} className={`pixel-btn${difficulty===d?' active':''}`} onClick={() => setDifficulty(d)}>{d}</button>
+                {['normal', 'hard'].map(d => (
+                  <button key={d} className={`pixel-btn${difficulty === d ? ' active' : ''}`}
+                    onClick={() => handleSetDifficulty(d)}>{d}</button>
                 ))}
                 <div className="settings-sep" />
                 <span className="section-lbl">TIME</span>
-                {[30,60,120].map(t => (
-                  <button key={t} className={`pixel-btn${timeLimit===t?' active':''}`} onClick={() => setTimeLimit(t)}>{t}s</button>
+                {[30, 60, 120].map(t => (
+                  <button key={t} className={`pixel-btn${timeLimit === t ? ' active' : ''}`}
+                    onClick={() => handleSetTimeLimit(t)}>{t}s</button>
                 ))}
-                <div style={{ marginLeft:'auto' }}>
-                  <button className="pixel-btn" style={{ textTransform:'uppercase', letterSpacing:'1px' }}
+                <div style={{ marginLeft: 'auto' }}>
+                  <button className="pixel-btn" style={{ textTransform: 'uppercase', letterSpacing: '1px' }}
                     onClick={() => router.push(HISTORY_ROUTE)}>
                     HISTORY
                   </button>
@@ -628,50 +685,53 @@ export default function GameboyTyping() {
           {/* TYPING SCREEN */}
           {!isFinished ? (
             <div className="gb-screen screen-texture"
-              style={{ padding:'clamp(16px,3vw,36px)', position:'relative', cursor:'default' }}
+              style={{ padding: 'clamp(16px,3vw,36px)', position: 'relative', cursor: 'default' }}
               onClick={() => { inputRef.current?.focus(); setIsFocused(true); }}>
 
-              <div className="gb-timer" style={{ marginBottom:'12px', opacity:isActive?1:0.4, transition:'opacity 0.3s' }}>
-                {String(timeLeft).padStart(2,'0')}
+              <div className="gb-timer" style={{ marginBottom: '12px', opacity: isActive ? 1 : 0.4, transition: 'opacity 0.3s' }}>
+                {String(timeLeft).padStart(2, '0')}
               </div>
               <div className="pixel-divider" />
 
+              {/* FIX 3: disabled until settings are loaded to prevent premature input */}
               <input ref={inputRef} type="text" spellCheck={false} autoComplete="off"
                 value={userInput} onChange={handleInputChange}
                 onBlur={() => setIsFocused(false)} onFocus={() => setIsFocused(true)}
-                style={{ position:'absolute', opacity:0, width:1, height:1, pointerEvents:'none' }} autoFocus />
+                disabled={!settingsLoaded}
+                style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+                autoFocus />
 
               {!isFocused && (
                 <div className="focus-overlay"><div className="focus-msg">CLICK TO FOCUS</div></div>
               )}
 
-              <div className={`words-box${isFocused?'':' blur-focus'}`}>
+              <div className={`words-box${isFocused ? '' : ' blur-focus'}`}>
                 {displayedWords.map((word, index) => {
                   const ai = currentPage * WORDS_PER_PAGE + index;
                   if (ai < currentWordIndex)
                     return <div key={ai} className={correctWords[ai] ? 'word-correct' : 'word-wrong'}>{word}</div>;
                   if (ai === currentWordIndex) {
-                    const chars=word.split(''), typedChars=userInput.split('');
-                    const maxLen=Math.max(chars.length,typedChars.length);
+                    const chars = word.split(''), typedChars = userInput.split('');
+                    const maxLen = Math.max(chars.length, typedChars.length);
                     return (
-                      <div key={ai} style={{ display:'inline-flex', alignItems:'center', background:'rgba(15,56,15,0.2)', padding:'0 4px', borderBottom:'3px solid #306230', whiteSpace:'nowrap' }}>
-                        {typedChars.length===0 && isFocused && <span className="gb-caret" />}
-                        {Array.from({length:maxLen}).map((_,ci) => {
-                          const char=chars[ci]??'', typed=typedChars[ci];
-                          let cls='char-pending', display=char;
-                          if (typed!==undefined) {
-                            if (!char)         { display=typed; cls='char-extra'; }
-                            else if (typed===char) cls='char-correct';
-                            else               cls='char-wrong';
+                      <div key={ai} style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(15,56,15,0.2)', padding: '0 4px', borderBottom: '3px solid #306230', whiteSpace: 'nowrap' }}>
+                        {typedChars.length === 0 && isFocused && <span className="gb-caret" />}
+                        {Array.from({ length: maxLen }).map((_, ci) => {
+                          const char = chars[ci] ?? '', typed = typedChars[ci];
+                          let cls = 'char-pending', display = char;
+                          if (typed !== undefined) {
+                            if (!char)          { display = typed; cls = 'char-extra'; }
+                            else if (typed === char) cls = 'char-correct';
+                            else                cls = 'char-wrong';
                           }
                           return (
-                            <span key={ci} style={{ position:'relative' }}>
-                              {ci===typedChars.length && ci>0 && isFocused && <span className="gb-caret" />}
+                            <span key={ci} style={{ position: 'relative' }}>
+                              {ci === typedChars.length && ci > 0 && isFocused && <span className="gb-caret" />}
                               <span className={cls}>{display}</span>
                             </span>
                           );
                         })}
-                        {typedChars.length>=maxLen && typedChars.length>0 && isFocused && <span className="gb-caret" />}
+                        {typedChars.length >= maxLen && typedChars.length > 0 && isFocused && <span className="gb-caret" />}
                       </div>
                     );
                   }
@@ -680,8 +740,8 @@ export default function GameboyTyping() {
               </div>
 
               <div className="pixel-divider" />
-              <div style={{ display:'flex', justifyContent:'center' }}>
-                <button className="pixel-btn" onClick={e => { e.stopPropagation(); generateWords(); }} style={{ fontSize:'8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <button className="pixel-btn" onClick={e => { e.stopPropagation(); generateWords(); }} style={{ fontSize: '8px' }}>
                   RESTART
                 </button>
               </div>
@@ -689,27 +749,27 @@ export default function GameboyTyping() {
 
           ) : (
             /* RESULTS SCREEN */
-            <div className="gb-screen screen-texture" style={{ padding:'clamp(16px,3vw,36px)', position:'relative', overflow:'hidden' }}>
+            <div className="gb-screen screen-texture" style={{ padding: 'clamp(16px,3vw,36px)', position: 'relative', overflow: 'hidden' }}>
 
               <Confetti active={isNewRecord} />
 
-              <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'4px' }}>
-                <div style={{ fontSize:'9px', color:'var(--gb-dark)', letterSpacing:'4px' }}>RESULTS</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                <div style={{ fontSize: '9px', color: 'var(--gb-dark)', letterSpacing: '4px' }}>RESULTS</div>
                 {isNewRecord && (
                   <div style={{
-                    fontSize:'6px', color:'var(--gb-darkest)', background:'var(--gb-mid)',
-                    border:'2px solid var(--gb-darkest)', padding:'2px 8px',
-                    letterSpacing:'1px', animation:'gb-pulse 0.6s steps(1) infinite',
+                    fontSize: '6px', color: 'var(--gb-darkest)', background: 'var(--gb-mid)',
+                    border: '2px solid var(--gb-darkest)', padding: '2px 8px',
+                    letterSpacing: '1px', animation: 'gb-pulse 0.6s steps(1) infinite',
                   }}>NEW RECORD!</div>
                 )}
               </div>
               <div className="pixel-divider" />
 
-              <div style={{ display:'flex', gap:'clamp(20px,5vw,48px)', flexWrap:'wrap', marginBottom:'12px' }}>
+              <div style={{ display: 'flex', gap: 'clamp(20px,5vw,48px)', flexWrap: 'wrap', marginBottom: '12px' }}>
                 <div><div className="stat-label">WPM</div><div className="stat-big">{stats.wpm}</div></div>
                 <div><div className="stat-label">ACC</div><div className="stat-big">{acc}%</div></div>
-                <div><div className="stat-label">CORRECT</div><div className="stat-big" style={{ fontSize:'clamp(18px,3vw,28px)' }}>{stats.correctWordsCount}</div></div>
-                <div><div className="stat-label">WRONG</div><div className="stat-big" style={{ fontSize:'clamp(18px,3vw,28px)', color:'rgba(15,56,15,0.5)' }}>{stats.wrongWordsCount}</div></div>
+                <div><div className="stat-label">CORRECT</div><div className="stat-big" style={{ fontSize: 'clamp(18px,3vw,28px)' }}>{stats.correctWordsCount}</div></div>
+                <div><div className="stat-label">WRONG</div><div className="stat-big" style={{ fontSize: 'clamp(18px,3vw,28px)', color: 'rgba(15,56,15,0.5)' }}>{stats.wrongWordsCount}</div></div>
               </div>
 
               <div className="pixel-divider" />
@@ -718,22 +778,22 @@ export default function GameboyTyping() {
               <ResultChart wordEvents={stats.wordEvents} timeLimit={timeLimit} />
               <div className="pixel-divider" />
 
-              <div style={{ fontSize:'8px', display:'flex', flexDirection:'column', gap:'8px', color:'var(--gb-dark)', marginBottom:'16px' }}>
-                <div style={{ display:'flex', justifyContent:'space-between' }}>
-                  <span>TEST</span><span style={{ color:'var(--gb-darkest)' }}>{timeLimit}s / {language} / {difficulty}</span>
+              <div style={{ fontSize: '8px', display: 'flex', flexDirection: 'column', gap: '8px', color: 'var(--gb-dark)', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>TEST</span><span style={{ color: 'var(--gb-darkest)' }}>{timeLimit}s / {language} / {difficulty}</span>
                 </div>
-                <div style={{ display:'flex', justifyContent:'space-between' }}>
-                  <span>KEYSTROKES</span><span style={{ color:'var(--gb-darkest)' }}>{stats.keystrokes.correct} ok / {stats.keystrokes.wrong} err</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>KEYSTROKES</span><span style={{ color: 'var(--gb-darkest)' }}>{stats.keystrokes.correct} ok / {stats.keystrokes.wrong} err</span>
                 </div>
               </div>
 
-              <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <button className="pixel-btn" onClick={() => generateWords()}
-                  style={{ fontSize:'8px', padding:'8px 18px', textTransform:'uppercase', letterSpacing:'1px' }}>
+                  style={{ fontSize: '8px', padding: '8px 18px', textTransform: 'uppercase', letterSpacing: '1px' }}>
                   PLAY AGAIN
                 </button>
                 <button className="pixel-btn" onClick={() => router.push(HISTORY_ROUTE)}
-                  style={{ fontSize:'8px', padding:'8px 18px', textTransform:'uppercase', letterSpacing:'1px' }}>
+                  style={{ fontSize: '8px', padding: '8px 18px', textTransform: 'uppercase', letterSpacing: '1px' }}>
                   VIEW HISTORY
                 </button>
               </div>
@@ -741,11 +801,26 @@ export default function GameboyTyping() {
           )}
         </main>
 
-        <footer className="gb-footer" style={{ marginTop:'20px', fontSize:'7px', color:'var(--gb-dark)', display:'flex', gap:'12px', opacity:0.7, flexWrap:'wrap' }}>
+        <footer className="gb-footer" style={{ marginTop: '20px', fontSize: '7px', color: 'var(--gb-dark)', display: 'flex', gap: '12px', opacity: 0.7, flexWrap: 'wrap' }}>
           <span><kbd>SPACE</kbd> submit word</span>
           <span>|</span>
           <span><kbd>TAB</kbd>+<kbd>ENTER</kbd> restart</span>
         </footer>
+
+        {/* LANGUAGE MISMATCH WARNING TOAST */}
+        {langWarn > 0 && (
+          <>
+            <div className="lang-warn-toast" key={langWarn}>
+              <span className="lang-warn-icon">⌨️</span>
+              <span>
+                {language === 'en'
+                  ? 'WRONG LANGUAGE! — SWITCH TO ENGLISH'
+                  : 'ผิดภาษา! — เปลี่ยนเป็นภาษาไทย'}
+              </span>
+            </div>
+            <div className="lang-warn-bar" key={`bar-${langWarn}`} />
+          </>
+        )}
       </div>
     </>
   );
