@@ -161,6 +161,13 @@ const style = `
   @keyframes toast-out {
     from { opacity: 1; } to { opacity: 0; }
   }
+
+  /* ── fullscreen button icon ── */
+  .fs-icon {
+    display: inline-block;
+    font-style: normal;
+    line-height: 1;
+  }
 `;
 
 /* ═══════════════════════════ CONSTANTS ═══════════════════════════ */
@@ -468,6 +475,23 @@ export default function GameboyTyping() {
     persistSettings({ ...settingsRef.current, timeLimit: v });
   }, []);
 
+  /* ── FULLSCREEN ── */
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
   const [words,            setWords]            = useState<string[]>([]);
   const [userInput,        setUserInput]        = useState<string>('');
   const [currentWordIndex, setCurrentWordIndex] = useState<number>(0);
@@ -661,8 +685,26 @@ export default function GameboyTyping() {
       <div className="gb-bg">
 
         {/* HEADER */}
-        <header style={{ width: '100%', maxWidth: '1100px', display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+        <header style={{ width: '100%', maxWidth: '1100px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div className="gb-logo">PIXELTYPE <span>v1.0</span></div>
+          <button
+            className="pixel-btn"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? 'Exit Fullscreen (F11)' : 'Fullscreen (F11)'}
+            style={{ fontSize: '8px', padding: '6px 10px', letterSpacing: '1px', textTransform: 'uppercase' }}
+          >
+            {isFullscreen ? (
+              // exit fullscreen icon: arrows pointing inward
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+                <path d="M4 0V4H0M8 0V4H12M4 12V8H0M8 12V8H12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="square"/>
+              </svg>
+            ) : (
+              // enter fullscreen icon: arrows pointing outward
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+                <path d="M0 4V0H4M12 4V0H8M0 8V12H4M12 8V12H8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="square"/>
+              </svg>
+            )}
+          </button>
         </header>
 
         <main style={{ width: '100%', maxWidth: '1100px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
