@@ -1,12 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════
    lib/words.ts  —  word bank & text data for PixelType
-   Style: 10fastfingers — top common words (normal) + natural sentences (hard)
    ═══════════════════════════════════════════════════════════════ */
 
-/* ────────────────────────────────────────────────────────────────
-   NORMAL MODE — top 200 most commonly used words
-   (mirrors 10fastfingers "Top 200 Words" lists)
-──────────────────────────────────────────────────────────────── */
+/* ── Normal mode: top 200 most common words ── */
 export const SAMPLE_WORDS: Record<string, string[]> = {
   en: [
     "the","be","to","of","and","a","in","that","have","it",
@@ -54,77 +50,76 @@ export const SAMPLE_WORDS: Record<string, string[]> = {
   ],
 };
 
-/* ────────────────────────────────────────────────────────────────
-   HARD MODE — natural short sentences joined together
-   (mirrors 10fastfingers "Advanced" / text practice mode)
-──────────────────────────────────────────────────────────────── */
-export const HARD_TEXT: Record<string, string> = {
-  en: [
-    "the sun sets slowly behind the mountains casting long shadows across the valley",
-    "she opened the window and felt the cool breeze brush against her face",
-    "he walked into the room and noticed the lights were already on",
-    "the dog ran across the field chasing the ball that had rolled away",
-    "they sat together by the fire talking about the events of the day",
-    "the book was left open on the table its pages turning in the wind",
-    "a cup of coffee sat on the desk growing cold beside the keyboard",
-    "the train arrived two minutes early and the platform was already crowded",
-    "she typed quickly her fingers moving across the keys without hesitation",
-    "the city lights reflected off the wet pavement after the evening rain",
-    "he picked up the phone looked at the screen and put it back down",
-    "the children ran out of the classroom as soon as the bell rang",
-    "a single cloud drifted slowly across an otherwise perfectly blue sky",
-    "the market was busy with people buying vegetables fruit and fresh bread",
-    "she had always wanted to visit the place her grandmother used to talk about",
-    "the project took three months to finish but the result was worth the effort",
-    "he closed the laptop stood up and stretched after hours of work",
-    "the rain began softly at first then grew heavier as the night went on",
-    "she smiled when she saw the message waiting for her in the morning",
-    "the old clock on the wall ticked steadily through the quiet afternoon",
-  ].join(" "),
+/* ── Hard mode: natural sentences split into individual words
+   BUG FIX: ภาษาไทยใช้ Array ของคำแยกกันแล้ว แทนที่จะ join ประโยค
+   เพราะ join(" ") แล้ว split(" ") ทำให้ได้ chunk ยาวๆ ที่พิมพ์ไม่ได้ ── */
+export const HARD_WORDS: Record<string, string[]> = {
+  en: (
+    "the sun sets slowly behind the mountains casting long shadows across the valley " +
+    "she opened the window and felt the cool breeze brush against her face " +
+    "he walked into the room and noticed the lights were already on " +
+    "the dog ran across the field chasing the ball that had rolled away " +
+    "they sat together by the fire talking about the events of the day " +
+    "the book was left open on the table its pages turning in the wind " +
+    "a cup of coffee sat on the desk growing cold beside the keyboard " +
+    "the train arrived two minutes early and the platform was already crowded " +
+    "she typed quickly her fingers moving across the keys without hesitation " +
+    "the city lights reflected off the wet pavement after the evening rain " +
+    "he picked up the phone looked at the screen and put it back down " +
+    "the children ran out of the classroom as soon as the bell rang " +
+    "a single cloud drifted slowly across an otherwise perfectly blue sky " +
+    "the market was busy with people buying vegetables fruit and fresh bread " +
+    "she had always wanted to visit the place her grandmother used to talk about " +
+    "the project took three months to finish but the result was worth the effort " +
+    "he closed the laptop stood up and stretched after hours of work " +
+    "the rain began softly at first then grew heavier as the night went on " +
+    "she smiled when she saw the message waiting for her in the morning " +
+    "the old clock on the wall ticked steadily through the quiet afternoon"
+  ).split(" "),
 
+  // BUG FIX: ภาษาไทย hard mode เปลี่ยนเป็น array ของคำแยกแต่ละคำ
+  // แทน array ของประโยคยาว เพื่อให้แต่ละ "word" ที่แสดงในหน้าจอพิมพ์ได้จริง
   th: [
-    "แสงแดดส่องผ่านหน้าต่างในยามเช้าทำให้ห้องสว่างขึ้นอย่างช้าๆ",
-    "เขาหยิบแก้วกาแฟขึ้นมาจิบแล้วมองออกไปนอกหน้าต่าง",
-    "เธอเปิดสมุดบันทึกและเริ่มเขียนความคิดที่ค้างอยู่ในใจมานาน",
-    "เด็กๆ วิ่งออกมาจากห้องเรียนทันทีที่กระดิ่งดังขึ้น",
-    "ฝนเริ่มตกเบาๆ ก่อนจะค่อยๆ แรงขึ้นในช่วงดึก",
-    "เขาปิดคอมพิวเตอร์แล้วลุกขึ้นยืดเส้นยืดสายหลังจากทำงานมาหลายชั่วโมง",
-    "เธอยิ้มเมื่อเห็นข้อความที่รอเธออยู่ในยามเช้า",
-    "รถไฟมาถึงก่อนเวลาสองนาทีและชานชาลาเริ่มคึกคักขึ้นแล้ว",
-    "แสงไฟของเมืองสะท้อนอยู่บนพื้นถนนที่เปียกหลังฝนตก",
-    "หมาตัวน้อยวิ่งข้ามทุ่งไล่ตามลูกบอลที่กลิ้งออกไป",
-    "เธอพิมพ์ได้รวดเร็วมากโดยที่นิ้วแทบไม่หยุดพัก",
-    "ตลาดยามเช้าเต็มไปด้วยผู้คนที่มาเลือกซื้อผักและผลไม้สด",
-    "นาฬิกาเก่าบนผนังเดินติกต็อกอย่างสม่ำเสมอตลอดบ่าย",
-    "เขาหยิบโทรศัพท์ขึ้นมามองหน้าจอแล้วก็วางลงตามเดิม",
-    "เธออยากไปยังสถานที่ที่คุณยายเคยเล่าให้ฟังมาตลอดชีวิต",
-    "งานโครงการใช้เวลาสามเดือนจึงเสร็จสมบูรณ์แต่ผลที่ได้คุ้มค่า",
-    "ก้อนเมฆก้อนเดียวลอยช้าๆ ผ่านท้องฟ้าสีฟ้าที่แจ่มใส",
-    "เธอเปิดหน้าต่างและรู้สึกถึงลมเย็นที่พัดผ่านแก้มมา",
-    "หนังสือถูกทิ้งไว้เปิดอยู่บนโต๊ะและหน้ากระดาษพลิ้วไหวตามลม",
-    "พวกเขานั่งรอบกองไฟและคุยกันเรื่องที่เกิดขึ้นตลอดทั้งวัน",
-  ].join(" "),
+    "แสงแดด","ส่องผ่าน","หน้าต่าง","ยามเช้า","ทำให้","ห้อง","สว่าง","อย่างช้าๆ",
+    "เขา","หยิบ","แก้วกาแฟ","จิบ","แล้ว","มอง","ออกไป","นอก","หน้าต่าง",
+    "เธอ","เปิด","สมุด","บันทึก","เริ่ม","เขียน","ความคิด","ที่ค้าง","ในใจ","มานาน",
+    "เด็กๆ","วิ่ง","ออกมา","จากห้องเรียน","ทันที","กระดิ่ง","ดังขึ้น",
+    "ฝน","เริ่ม","ตก","เบาๆ","ก่อน","ค่อยๆ","แรงขึ้น","ช่วงดึก",
+    "เขา","ปิด","คอมพิวเตอร์","ลุกขึ้น","ยืดเส้น","หลังจาก","ทำงาน","หลาย","ชั่วโมง",
+    "เธอ","ยิ้ม","เมื่อเห็น","ข้อความ","รอ","อยู่","ยามเช้า",
+    "รถไฟ","มาถึง","ก่อนเวลา","สองนาที","ชานชาลา","เริ่ม","คึกคัก",
+    "แสงไฟ","เมือง","สะท้อน","พื้นถนน","เปียก","หลังฝน","ตก",
+    "หมา","ตัวน้อย","วิ่ง","ข้ามทุ่ง","ไล่ตาม","ลูกบอล","กลิ้ง","ออกไป",
+    "เธอ","พิมพ์","รวดเร็ว","นิ้ว","แทบ","ไม่","หยุด","พัก",
+    "ตลาด","ยามเช้า","เต็ม","ผู้คน","เลือกซื้อ","ผัก","ผลไม้","สด",
+    "นาฬิกา","เก่า","ผนัง","เดิน","สม่ำเสมอ","ตลอด","บ่าย",
+    "เขา","หยิบ","โทรศัพท์","มอง","หน้าจอ","วาง","ลง","ตามเดิม",
+    "เธอ","อยาก","ไป","สถานที่","คุณยาย","เคยเล่า","ตลอด","ชีวิต",
+    "งาน","โครงการ","ใช้เวลา","สามเดือน","เสร็จ","สมบูรณ์","ผล","คุ้มค่า",
+    "เมฆ","ก้อนเดียว","ลอย","ช้าๆ","ท้องฟ้า","สีฟ้า","แจ่มใส",
+    "เธอ","เปิด","หน้าต่าง","รู้สึก","ลมเย็น","พัดผ่าน","แก้ม",
+    "หนังสือ","เปิด","อยู่","บนโต๊ะ","หน้ากระดาษ","พลิ้วไหว","ตามลม",
+    "พวกเขา","นั่ง","รอบกองไฟ","คุย","เรื่อง","ที่เกิดขึ้น","ทั้งวัน",
+  ],
 };
 
-/* ────────────────────────────────────────────────────────────────
-   HELPERS
-──────────────────────────────────────────────────────────────── */
+/* ── Helpers ── */
 
-/** Generate 300 words for hard mode from natural sentence pool */
+/** BUG FIX: ใช้ HARD_WORDS แทน HARD_TEXT เพื่อให้แต่ละ element เป็นคำเดียว */
 export function getHardWords(lang: string): string[] {
-  const base = (HARD_TEXT[lang] ?? HARD_TEXT["en"]).trim().split(/\s+/);
+  const src = HARD_WORDS[lang] ?? HARD_WORDS['en'];
   const arr: string[] = [];
-  while (arr.length < 300) arr.push(...base);
+  while (arr.length < 300) arr.push(...src);
   return arr.slice(0, 300);
 }
 
 /** Generate 300 random words for normal mode */
 export function getRandomWords(lang: string): string[] {
-  const src = SAMPLE_WORDS[lang] ?? SAMPLE_WORDS["en"];
+  const src = SAMPLE_WORDS[lang] ?? SAMPLE_WORDS['en'];
   return Array.from({ length: 300 }, () => src[Math.floor(Math.random() * src.length)]);
 }
 
 /** Generate words based on difficulty — main entry point */
 export function generateWordList(lang: string, difficulty: string): string[] {
-  return difficulty === "hard" ? getHardWords(lang) : getRandomWords(lang);
+  return difficulty === 'hard' ? getHardWords(lang) : getRandomWords(lang);
 }

@@ -67,10 +67,12 @@ const style = `
     margin: 12px 0;
   }
 
+
+
   .words-box {
     display: flex; flex-wrap: wrap; gap: 10px 24px;
     font-size: clamp(14px,2.2vw,20px); line-height: 3.2;
-    height: 320px; overflow: hidden; align-content: flex-start;
+    height: 320px; flex-shrink: 0; align-content: flex-start;
   }
   @media(max-width:600px){ .words-box{ height:260px; font-size:13px; gap:8px 14px; } }
 
@@ -470,7 +472,7 @@ export default function GameboyTyping() {
   const [userInput,        setUserInput]        = useState<string>('');
   const [currentWordIndex, setCurrentWordIndex] = useState<number>(0);
   const [correctWords,     setCorrectWords]     = useState<boolean[]>([]);
-  const [timeLeft,         setTimeLeft]         = useState<number>(60);
+  const [timeLeft,         setTimeLeft]         = useState<number>(0);
   const [isActive,         setIsActive]         = useState<boolean>(false);
   const [isFinished,       setIsFinished]       = useState<boolean>(false);
   const [isFocused,        setIsFocused]        = useState<boolean>(true);
@@ -580,6 +582,17 @@ export default function GameboyTyping() {
     return () => { if (iv) clearInterval(iv); };
   }, [isActive, timeLeft]);
   // FIX: removed timeLimit/language/difficulty from deps — read from settingsRef instead
+
+
+  /* BUG 3 FIX: auto-extend words when running low (fast typist safety net) */
+  useEffect(() => {
+    if (!isActive || isFinished) return;
+    if (words.length - currentWordIndex < 50) {
+      const { language: lang, difficulty: diff } = settingsRef.current;
+      const extra = generateWordList(lang, diff);
+      setWords(prev => [...prev, ...extra]);
+    }
+  }, [currentWordIndex, isActive, isFinished, words.length]);
 
   const tabPressedRef = useRef<boolean>(false);
 
@@ -692,7 +705,7 @@ export default function GameboyTyping() {
               onClick={() => { inputRef.current?.focus(); setIsFocused(true); }}>
 
               <div className="gb-timer" style={{ marginBottom: '12px', opacity: isActive ? 1 : 0.4, transition: 'opacity 0.3s' }}>
-                {String(timeLeft).padStart(2, '0')}
+                {String(timeLeft || settingsRef.current.timeLimit).padStart(2, '0')}
               </div>
               <div className="pixel-divider" />
 
