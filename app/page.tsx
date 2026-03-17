@@ -581,6 +581,27 @@ export default function GameboyTyping() {
   }, [isActive, timeLeft]);
   // FIX: removed timeLimit/language/difficulty from deps — read from settingsRef instead
 
+  const tabPressedRef = useRef<boolean>(false);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Tab') {
+      e.preventDefault(); // ป้องกัน focus เปลี่ยน
+      tabPressedRef.current = true;
+      return;
+    }
+    if (e.key === 'Enter' && tabPressedRef.current) {
+      e.preventDefault();
+      tabPressedRef.current = false;
+      generateWords();
+      return;
+    }
+    tabPressedRef.current = false;
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Tab') tabPressedRef.current = true; // keep true while tab held
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     if (isFinished) return;
@@ -678,6 +699,8 @@ export default function GameboyTyping() {
               {/* FIX 3: disabled until settings are loaded to prevent premature input */}
               <input ref={inputRef} type="text" spellCheck={false} autoComplete="off"
                 value={userInput} onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                onKeyUp={handleKeyUp}
                 onBlur={() => setIsFocused(false)} onFocus={() => setIsFocused(true)}
                 disabled={!settingsLoaded}
                 style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
@@ -719,13 +742,6 @@ export default function GameboyTyping() {
                   }
                   return <div key={ai} className="word-idle">{word}</div>;
                 })}
-              </div>
-
-              <div className="pixel-divider" />
-              <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <button className="pixel-btn" onClick={e => { e.stopPropagation(); generateWords(); }} style={{ fontSize: '8px' }}>
-                  RESTART
-                </button>
               </div>
             </div>
 
