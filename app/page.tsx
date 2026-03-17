@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { buildChartData, buildWpmPoints, WordEvent } from '../lib/chartUtils';
+import { generateWordList } from '../lib/words';
 
 /* ═══════════════════════════ CSS ═══════════════════════════ */
 const style = `
@@ -160,15 +161,7 @@ const style = `
   }
 `;
 
-/* ═══════════════════════════ DATA ═══════════════════════════ */
-const FAIRY_TALE_TEXT: Record<string, string> = {
-  en: `Once upon a time in a land far away there lived a young girl named Elara who had hair as dark as midnight and eyes like two bright stars she spent her days wandering through the ancient forest collecting fallen leaves and whispering secrets to the old oak trees one morning she discovered a tiny door carved into the roots of the oldest tree in the wood pushing it open she found a golden staircase spiraling down into the earth at the bottom waited a small fox with a silver tail who bowed and said welcome dear traveler we have waited long for you to arrive the fox led her through glowing tunnels past rivers of amber and bridges made of moonbeam she saw castles built from crystal and gardens where flowers sang soft lullabies in the evening breeze the girl was not afraid because the forest had always been her friend and magic felt as natural as breathing when she finally returned home the sunrise painted the sky in shades of rose and honey and she carried in her heart a warmth that no winter could ever touch`,
-  th: `กาลครั้งหนึ่งนานมาแล้ว ในดินแดนที่ห่างไกล มีเด็กหญิงคนหนึ่งชื่อ เอลารา เธอมีผมดำสลวยดั่งราตรีและดวงตาสว่างดั่งดาว เธอใช้เวลาทุกวันเดินเล่นในป่าโบราณ เก็บใบไม้ที่ร่วงหล่นและกระซิบความลับกับต้นโอ๊กเก่าแก่ เช้าวันหนึ่งเธอพบประตูเล็กๆ แกะสลักอยู่ที่รากของต้นไม้ที่เก่าแก่ที่สุด เมื่อเปิดออกพบบันไดทองคำวกวนลงสู่พื้นดิน ที่ปลายบันไดมีสุนัขจิ้งจอกตัวเล็กหางเงินรอคอยอยู่ มันก้มหัวและพูดว่า ยินดีต้อนรับนักเดินทาง เราได้รอคอยคุณมานานแล้ว สุนัขจิ้งจอกนำเธอผ่านอุโมงค์เรืองแสง แม่น้ำอำพัน และสะพานที่สร้างจากแสงจันทร์ เธอเห็นปราสาทสร้างจากคริสตัลและสวนที่ดอกไม้ร้องเพลงกล่อมในสายลมยามเย็น เด็กหญิงไม่กลัวเลย เพราะป่าคือเพื่อนเก่าของเธอ และเวทมนตร์รู้สึกเป็นธรรมชาติดั่งการหายใจ`,
-};
-const SAMPLE_WORDS: Record<string, string[]> = {
-  en: ["the","be","to","of","and","a","in","that","have","it","for","not","on","with","he","as","you","do","at","this","but","his","by","from","they","we","say","her","she","or","an","will","my","one","all","would","there","their","what","so","up","out","if","about","who","get","which","go","me","when","make","can","like","time","no","just"],
-  th: ["และ","ที่","เป็น","ใน","การ","มี","ได้","ให้","ไป","ของ","จะ","ไม่","กับ","มา","ความ","ก็","ด้วย","นี้","ว่า","จาก","ผู้","หรือ","อย่าง","คือ","แล้ว","อาจ","ต้อง","คน","ซึ่ง","เรา","ท่าน","เพื่อ","นั้น","มาก","หนึ่ง","ส่วน","ขึ้น","เขา"],
-};
+/* ═══════════════════════════ CONSTANTS ═══════════════════════════ */
 const WORDS_PER_PAGE = 30;
 const HISTORY_ROUTE  = '/history';
 
@@ -190,12 +183,6 @@ interface HistoryRecord {
 interface SavedSettings { language: string; difficulty: string; timeLimit: number; }
 
 /* ═══════════════════════════ HELPERS ═══════════════════════════ */
-function getFairyTaleWords(lang: string): string[] {
-  const base = (FAIRY_TALE_TEXT[lang] ?? FAIRY_TALE_TEXT['en']).trim().split(/\s+/);
-  const arr: string[] = [];
-  while (arr.length < 300) arr.push(...base);
-  return arr.slice(0, 300);
-}
 function saveResult(r: Omit<HistoryRecord, 'date'>): void {
   try {
     const existing = JSON.parse(localStorage.getItem('pixeltype_history') ?? '[]') as HistoryRecord[];
@@ -520,12 +507,7 @@ export default function GameboyTyping() {
     diff = settingsRef.current.difficulty,
     time = settingsRef.current.timeLimit,
   ) => {
-    const newWords = diff === 'hard'
-      ? getFairyTaleWords(lang)
-      : Array.from({ length: 300 }, () => {
-          const src = SAMPLE_WORDS[lang] ?? SAMPLE_WORDS['en'];
-          return src[Math.floor(Math.random() * src.length)];
-        });
+    const newWords = generateWordList(lang, diff);
     setWords(newWords);
     setUserInput('');
     setCurrentWordIndex(0);

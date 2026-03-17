@@ -128,6 +128,24 @@ const style = `
   .fadein { animation: gb-fadein 0.25s ease forwards; }
 
   .controls-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  /* ── pagination ── */
+  .pagination {
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px; flex-wrap: wrap; padding: 14px;
+    border-top: 3px solid rgba(48,98,48,0.35);
+  }
+  .page-btn {
+    border: 3px solid var(--gb-dark); box-shadow: 2px 2px 0 var(--gb-darkest);
+    cursor: pointer; background: var(--gb-mid); color: var(--gb-darkest);
+    width: 28px; height: 28px; font-size: 7px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.08s; flex-shrink: 0;
+  }
+  .page-btn:hover  { box-shadow: 1px 1px 0 var(--gb-darkest); transform: translate(1px,1px); }
+  .page-btn.active { background: var(--gb-darkest); color: var(--gb-mid); box-shadow: inset 2px 2px 0 var(--gb-dark); transform: translate(1px,1px); cursor: default; }
+  .page-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: 2px 2px 0 var(--gb-darkest); }
+  .page-info { font-size: 7px; color: var(--gb-dark); letter-spacing: 1px; padding: 0 4px; }
 `;
 
 /* ── types ── */
@@ -283,6 +301,7 @@ export default function HistoryPage() {
   const [selected,     setSelected]     = useState<HistoryRecord | null>(null);
   /* FIX 4: inline confirm state — replaces window.confirm() which breaks on iOS PWA */
   const [confirmClear, setConfirmClear] = useState<boolean>(false);
+  const [currentPage,  setCurrentPage]  = useState<number>(1);
 
   useEffect(() => {
     try {
@@ -300,6 +319,8 @@ export default function HistoryPage() {
   };
   const handleClearCancel = () => setConfirmClear(false);
 
+  const PER_PAGE = 15;
+
   const filtered: HistoryRecord[] = history
     .filter(r => filter === 'all' || r.difficulty === filter)
     .sort((a, b) => {
@@ -307,6 +328,15 @@ export default function HistoryPage() {
       if (sortBy === 'acc') return b.acc - a.acc;
       return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
+
+  const totalPages  = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  const safePage    = Math.min(currentPage, totalPages);
+  const pageStart   = (safePage - 1) * PER_PAGE;
+  const paginated   = filtered.slice(pageStart, pageStart + PER_PAGE);
+
+  // reset to page 1 when filter/sort changes
+  const handleFilter = (v: FilterType) => { setFilter(v); setCurrentPage(1); };
+  const handleSort   = (v: SortType)   => { setSortBy(v); setCurrentPage(1); };
 
   const bestWpm = history.length ? Math.max(...history.map(r => r.wpm)) : 0;
   const avgWpm  = history.length ? Math.round(history.reduce((s, r) => s + r.wpm, 0) / history.length) : 0;
@@ -362,12 +392,12 @@ export default function HistoryPage() {
             <div className="controls-bar">
               <span style={{ fontSize: '7px', color: 'var(--gb-dark)', letterSpacing: '1px' }}>FILTER</span>
               {filterOpts.map(f => (
-                <button key={f.value} className={`pixel-btn${filter === f.value ? ' sel' : ''}`} onClick={() => setFilter(f.value)}>{f.label}</button>
+                <button key={f.value} className={`pixel-btn${filter === f.value ? ' sel' : ''}`} onClick={() => handleFilter(f.value)}>{f.label}</button>
               ))}
               <div style={{ width: '2px', height: '20px', background: 'var(--gb-dark)' }} />
               <span style={{ fontSize: '7px', color: 'var(--gb-dark)', letterSpacing: '1px' }}>SORT</span>
               {sortOpts.map(s => (
-                <button key={s.value} className={`pixel-btn${sortBy === s.value ? ' sel' : ''}`} onClick={() => setSortBy(s.value)}>{s.label}</button>
+                <button key={s.value} className={`pixel-btn${sortBy === s.value ? ' sel' : ''}`} onClick={() => handleSort(s.value)}>{s.label}</button>
               ))}
             </div>
 
@@ -409,12 +439,13 @@ export default function HistoryPage() {
                   <span className="col-lang">LANG</span>
                   <span className="col-mode">MODE</span>
                 </div>
-                {filtered.map((r, i) => {
+                {paginated.map((r, i) => {
+                  const globalIndex = pageStart + i;
                   const rankCls = sortBy === 'wpm'
-                    ? (i === 0 ? 'rank-gold' : i === 1 ? 'rank-silver' : i === 2 ? 'rank-bronze' : '')
+                    ? (globalIndex === 0 ? 'rank-gold' : globalIndex === 1 ? 'rank-silver' : globalIndex === 2 ? 'rank-bronze' : '')
                     : '';
                   return (
-                    <div key={i} className="tbl-row fadein" style={{ animationDelay: `${i * 0.025}s` }}
+                    <div key={r.date} className="tbl-row fadein" style={{ animationDelay: `${i * 0.025}s` }}
                       onClick={() => setSelected(r)} title="Click to view details">
                       <span style={{ fontSize: '6px', opacity: 0.75 }}>{formatDate(r.date)}</span>
                       <span className={rankCls} style={{ fontWeight: 'bold' }}>{r.wpm}</span>
@@ -427,6 +458,30 @@ export default function HistoryPage() {
                     </div>
                   );
                 })}
+                {/* ── pagination ── */}
+                {totalPages > 1 && (
+                  <div className="pagination">
+                    <button className="page-btn" onClick={() => setCurrentPage(1)}        disabled={safePage === 1}>«</button>
+                    <button className="page-btn" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                      .reduce<(number | '…')[]>((acc, p, idx, arr) => {
+                        if (idx > 0 && typeof arr[idx - 1] === 'number' && (p as number) - (arr[idx - 1] as number) > 1) acc.push('…');
+                        acc.push(p);
+                        return acc;
+                      }, [])
+                      .map((p, i) =>
+                        p === '…'
+                          ? <span key={`ellipsis-${i}`} className="page-info">…</span>
+                          : <button key={p} className={`page-btn${safePage === p ? ' active' : ''}`}
+                              onClick={() => setCurrentPage(p as number)}>{p}</button>
+                      )
+                    }
+                    <button className="page-btn" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</button>
+                    <button className="page-btn" onClick={() => setCurrentPage(totalPages)} disabled={safePage === totalPages}>»</button>
+                    <span className="page-info">{pageStart + 1}–{Math.min(pageStart + PER_PAGE, filtered.length)} of {filtered.length}</span>
+                  </div>
+                )}
               </>
             )}
           </div>
