@@ -193,11 +193,18 @@ interface SavedSettings { language: string; difficulty: string; timeLimit: numbe
 
 /* ═══════════════════════════ HELPERS ═══════════════════════════ */
 function saveResult(r: Omit<HistoryRecord, 'date'>): void {
+  const record: HistoryRecord = { ...r, date: new Date().toISOString() };
   try {
     const existing = JSON.parse(localStorage.getItem('pixeltype_history') ?? '[]') as HistoryRecord[];
-    existing.unshift({ ...r, date: new Date().toISOString() });
+    existing.unshift(record);
     localStorage.setItem('pixeltype_history', JSON.stringify(existing.slice(0, 50)));
   } catch { /* ignore */ }
+  // save to MongoDB (fire-and-forget)
+  fetch('/api/scores', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(record),
+  }).catch(() => { /* ignore network errors */ });
 }
 const SETTINGS_KEY = 'pixeltype_settings';
 function loadSettings(): SavedSettings {

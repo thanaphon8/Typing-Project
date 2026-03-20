@@ -304,10 +304,16 @@ export default function HistoryPage() {
   const [currentPage,  setCurrentPage]  = useState<number>(1);
 
   useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem('pixeltype_history') ?? '[]') as HistoryRecord[];
-      setHistory(stored);
-    } catch { setHistory([]); }
+    fetch('/api/scores')
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then((data: HistoryRecord[]) => setHistory(data))
+      .catch(() => {
+        // fallback to localStorage if API unavailable
+        try {
+          const stored = JSON.parse(localStorage.getItem('pixeltype_history') ?? '[]') as HistoryRecord[];
+          setHistory(stored);
+        } catch { setHistory([]); }
+      });
   }, []);
 
   /* FIX 4: no more window.confirm() */
@@ -316,6 +322,7 @@ export default function HistoryPage() {
     localStorage.removeItem('pixeltype_history');
     setHistory([]);
     setConfirmClear(false);
+    fetch('/api/scores', { method: 'DELETE' }).catch(() => {});
   };
   const handleClearCancel = () => setConfirmClear(false);
 
