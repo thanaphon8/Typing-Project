@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import clientPromise from '../../../lib/mongodb';
+import getClientPromise from '../../../lib/mongodb';
 
 const DB_NAME = 'pixeltype';
 const COL_NAME = 'scores';
 
 export async function GET() {
   try {
-    const client = await clientPromise;
+    const client = await getClientPromise();
     const col = client.db(DB_NAME).collection(COL_NAME);
     const scores = await col
       .find({}, { projection: { _id: 0 } })
@@ -22,7 +22,7 @@ export async function GET() {
 
 export async function DELETE() {
   try {
-    const client = await clientPromise;
+    const client = await getClientPromise();
     const col = client.db(DB_NAME).collection(COL_NAME);
     await col.deleteMany({});
     return NextResponse.json({ ok: true });
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     const doc = { wpm, acc, timeLimit, language, difficulty, keystrokes, correctWordsCount, wrongWordsCount, date };
 
-    const client = await clientPromise;
+    const client = await getClientPromise();
     const col = client.db(DB_NAME).collection(COL_NAME);
     await col.insertOne(doc);
 
